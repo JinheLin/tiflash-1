@@ -15,6 +15,8 @@
 #include <Storages/DeltaMerge/ReadThread/SegmentReader.h>
 #include <Storages/DeltaMerge/Segment.h>
 
+#include "absl/synchronization/mutex.h"
+
 namespace DB::DM
 {
 SegmentReadTaskScheduler::SegmentReadTaskScheduler()
@@ -33,8 +35,8 @@ SegmentReadTaskScheduler::~SegmentReadTaskScheduler()
 void SegmentReadTaskScheduler::add(const SegmentReadTaskPoolPtr & pool)
 {
     Stopwatch sw_add;
-    std::lock_guard add_lock(add_mtx);
-    std::lock_guard lock(mtx);
+    absl::MutexLock add_lock(&absl_add_mtx);
+    absl::MutexLock lock(&absl_mtx);
     Stopwatch sw_do_add;
     read_pools.add(pool);
 
@@ -189,7 +191,7 @@ bool SegmentReadTaskScheduler::isStop() const
 bool SegmentReadTaskScheduler::schedule()
 {
     Stopwatch sw_sche_all;
-    std::lock_guard lock(mtx);
+    absl::MutexLock lock(&absl_mtx);
     Stopwatch sw_do_sche_all;
     static constexpr size_t max_sche_count = 8;
     auto pool_count = read_pools.size();

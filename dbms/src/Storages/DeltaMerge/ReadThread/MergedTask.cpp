@@ -104,7 +104,7 @@ void MergedTask::setException(const DB::Exception & e)
 
 MergedTaskPtr MergedTaskPool::pop(uint64_t pool_id)
 {
-    std::lock_guard lock(mtx);
+    absl::MutexLock lock(&absl_mtx);
     MergedTaskPtr target;
     for (auto itr = merged_task_pool.begin(); itr != merged_task_pool.end(); ++itr)
     {
@@ -120,13 +120,13 @@ MergedTaskPtr MergedTaskPool::pop(uint64_t pool_id)
 
 void MergedTaskPool::push(const MergedTaskPtr & t)
 {
-    std::lock_guard lock(mtx);
+    absl::MutexLock lock(&absl_mtx);
     merged_task_pool.push_back(t);
 }
 
 bool MergedTaskPool::has(UInt64 pool_id)
 {
-    std::lock_guard lock(mtx);
+    absl::MutexLock lock(&absl_mtx);
     for (const auto & t : merged_task_pool)
     {
         if (t->containPool(pool_id))

@@ -152,8 +152,8 @@ public:
     bool has(UInt64 pool_id);
 
 private:
-    std::mutex mtx;
-    std::list<MergedTaskPtr> merged_task_pool;
+    absl::Mutex absl_mtx;
+    std::list<MergedTaskPtr> merged_task_pool ABSL_GUARDED_BY(absl_mtx);
     LoggerPtr log;
 };
 } // namespace DB::DM

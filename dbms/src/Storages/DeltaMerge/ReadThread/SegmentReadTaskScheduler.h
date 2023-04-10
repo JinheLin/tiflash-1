@@ -16,6 +16,7 @@
 #include <Storages/DeltaMerge/ReadThread/CircularScanList.h>
 #include <Storages/DeltaMerge/ReadThread/MergedTask.h>
 #include <Storages/DeltaMerge/SegmentReadTaskPool.h>
+#include <absl/synchronization/mutex.h>
 
 #include <memory>
 namespace DB::DM
@@ -43,35 +44,35 @@ public:
     DISALLOW_COPY_AND_MOVE(SegmentReadTaskScheduler);
 
     // Add SegmentReadTaskPool to `read_pools` and index segments into merging_segments.
-    void add(const SegmentReadTaskPoolPtr & pool);
+    void add(const SegmentReadTaskPoolPtr & pool) ABSL_LOCKS_EXCLUDED(absl_add_mtx, absl_mtx);
 
     void pushMergedTask(const MergedTaskPtr & p) { merged_task_pool.push(p); }
 
 private:
     SegmentReadTaskScheduler();
 
-    // Choose segment to read.
-    // Returns <MergedTaskPtr, run_next_schedule_immediately>
-    std::pair<MergedTaskPtr, bool> scheduleMergedTask();
-
     void setStop();
     bool isStop() const;
-    bool schedule();
-    void schedLoop();
     bool needScheduleToRead(const SegmentReadTaskPoolPtr & pool);
-    SegmentReadTaskPools getPoolsUnlock(const std::vector<uint64_t> & pool_ids);
+
+    void schedLoop() ABSL_LOCKS_EXCLUDED(absl_mtx);
+    bool schedule() ABSL_LOCKS_EXCLUDED(absl_mtx);
+    // Choose segment to read.
+    // Returns <MergedTaskPtr, run_next_schedule_immediately>
+    std::pair<MergedTaskPtr, bool> scheduleMergedTask() ABSL_EXCLUSIVE_LOCKS_REQUIRED(absl_mtx);
+    SegmentReadTaskPoolPtr scheduleSegmentReadTaskPoolUnlock() ABSL_EXCLUSIVE_LOCKS_REQUIRED(absl_mtx);
     // <seg_id, pool_ids>
     std::optional<std::pair<GlobalSegmentID, std::vector<UInt64>>> scheduleSegmentUnlock(
-        const SegmentReadTaskPoolPtr & pool);
-    SegmentReadTaskPoolPtr scheduleSegmentReadTaskPoolUnlock();
+        const SegmentReadTaskPoolPtr & pool) ABSL_EXCLUSIVE_LOCKS_REQUIRED(absl_mtx);
+    SegmentReadTaskPools getPoolsUnlock(const std::vector<uint64_t> & pool_ids) ABSL_EXCLUSIVE_LOCKS_REQUIRED(absl_mtx);
 
     // To restrict the instantaneous concurrency of `add` and avoid `schedule` from always failing to acquire the lock.
-    std::mutex add_mtx;
-    std::mutex mtx;
-    SegmentReadTaskPoolList read_pools;
+    absl::Mutex absl_add_mtx ABSL_ACQUIRED_BEFORE(absl_mtx);
 
+    absl::Mutex absl_mtx;
+    SegmentReadTaskPoolList read_pools ABSL_GUARDED_BY(absl_mtx);
     // GlobalSegmentID -> pool_ids
-    MergingSegments merging_segments;
+    MergingSegments merging_segments ABSL_GUARDED_BY(absl_mtx);
 
     MergedTaskPool merged_task_pool;
 
