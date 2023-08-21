@@ -52,12 +52,15 @@ struct SegmentSnapshot : private boost::noncopyable
     DeltaSnapshotPtr delta;
     StableSnapshotPtr stable;
 
-    SegmentSnapshot(DeltaSnapshotPtr && delta_, StableSnapshotPtr && stable_)
+    LoggerPtr log;
+
+    SegmentSnapshot(DeltaSnapshotPtr && delta_, StableSnapshotPtr && stable_, LoggerPtr && log_)
         : delta(std::move(delta_))
         , stable(std::move(stable_))
+        , log(std::move(log_))
     {}
 
-    SegmentSnapshotPtr clone() const { return std::make_shared<SegmentSnapshot>(delta->clone(), stable->clone()); }
+    SegmentSnapshotPtr clone() const { return std::make_shared<SegmentSnapshot>(delta->clone(), stable->clone(), log->getChild()); }
 
     UInt64 getBytes() const { return delta->getBytes() + stable->getBytes(); }
     UInt64 getRows() const { return delta->getRows() + stable->getRows(); }
@@ -614,7 +617,7 @@ public:
     /// Returns <placed index, this index is fully indexed or not>
     std::pair<DeltaIndexPtr, bool> ensurePlace(
         const DMContext & dm_context,
-        const StableSnapshotPtr & stable_snap,
+        const SegmentSnapshotPtr & segment_snap,
         const DeltaValueReaderPtr & delta_reader,
         const RowKeyRanges & read_ranges,
         UInt64 max_version) const;

@@ -47,7 +47,12 @@ RNReadSegmentTaskPtr RNReadSegmentTask::buildFromEstablishResp(
         read_ranges[i] = RowKeyRange::deserialize(rb);
     }
 
-    auto tracing_id = fmt::format("{} segment_id={}", table_log->identifier(), proto.segment_id());
+    auto tracing_id = fmt::format(
+        "{} segment_id={} epoch={} delta_epoch={}",
+        table_log->identifier(),
+        proto.segment_id(),
+        proto.segment_epoch(),
+        proto.delta_index_epoch());
     auto dm_context = std::make_shared<DMContext>(
         db_context,
         /* path_pool */ nullptr,
