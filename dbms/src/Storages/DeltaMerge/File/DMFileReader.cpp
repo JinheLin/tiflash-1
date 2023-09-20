@@ -14,6 +14,7 @@
 
 #include <Columns/ColumnsCommon.h>
 #include <Common/CurrentMetrics.h>
+#include <Common/MemoryTracker.h>
 #include <Common/Stopwatch.h>
 #include <Common/escapeForFileName.h>
 #include <DataTypes/IDataType.h>
@@ -801,6 +802,17 @@ void DMFileReader::readFromDisk(
     }
 }
 
+[[nodiscard]] static auto disableMemoryTrackerUnderScope(bool has_concurrent_reader)
+{
+    auto * current_memory_tracker_backup = current_memory_tracker;
+    if (has_concurrent_reader)
+    {
+        current_memory_tracker = nullptr;
+    }
+    return ext::make_scope_guard(
+        [current_memory_tracker_backup]() { current_memory_tracker = current_memory_tracker_backup; });
+}
+
 void DMFileReader::readColumn(
     const ColumnDefine & column_define,
     ColumnPtr & column,
@@ -809,6 +821,8 @@ void DMFileReader::readColumn(
     size_t read_rows,
     size_t skip_packs)
 {
+    bool has_concurrent_reader = DMFileReaderPool::instance().hasConcurrentReader(*this);
+    auto guard = disableMemoryTrackerUnderScope(has_concurrent_reader);
     if (!getCachedPacks(column_define.id, start_pack_id, pack_count, read_rows, column))
     {
         auto data_type = dmfile->getColumnStat(column_define.id).type;
@@ -822,7 +836,7 @@ void DMFileReader::readColumn(
         last_read_from_cache[column_define.id] = true;
     }
 
-    if (col_data_cache != nullptr)
+    if (has_concurrent_reader && col_data_cache != nullptr)
     {
         DMFileReaderPool::instance().set(*this, column_define.id, start_pack_id, pack_count, column);
     }
