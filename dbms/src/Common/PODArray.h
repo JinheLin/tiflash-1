@@ -21,6 +21,7 @@
 #include <common/likely.h>
 #include <common/strong_typedef.h>
 #include <string.h>
+#include <Common/MemoryTracker.h>
 
 #include <algorithm>
 #include <boost/iterator_adaptors.hpp>
@@ -29,6 +30,7 @@
 #include <cstddef>
 #include <iostream>
 #include <memory>
+#include <ext/scope_guard.h>
 
 #ifndef NDEBUG
 #include <sys/mman.h>
@@ -106,6 +108,8 @@ protected:
     char * c_end = null;
     char * c_end_of_storage = null; /// Does not include pad_right.
 
+    bool track_memory_usage;
+
     /// The amount of memory occupied by the num_elements of the elements.
     static size_t byte_size(size_t num_elements) { return num_elements * ELEMENT_SIZE; }
 
@@ -146,6 +150,15 @@ protected:
             return;
 
         unprotect();
+
+        auto * current_memory_tracker_backup = current_memory_tracker;
+        SCOPE_EXIT({
+            current_memory_tracker = current_memory_tracker_backup;
+        });
+        if (!track_memory_usage)
+        {
+            current_memory_tracker = nullptr;
+        }
 
         TAllocator::free(c_start - pad_left, allocated_bytes());
     }
@@ -286,6 +299,8 @@ public:
     }
 
     ~PODArrayBase() { dealloc(); }
+
+    PODArrayBase() : track_memory_usage(current_memory_tracker != nullptr) {}
 };
 
 template <
