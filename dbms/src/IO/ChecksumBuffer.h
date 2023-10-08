@@ -235,13 +235,12 @@ public:
 
     size_t readBig(char * buffer, size_t size) override
     {
-        std::cout << fmt::format("readBig: {}\n", in->getFileName());
         const auto expected = size;
         auto & frame = reinterpret_cast<ChecksumFrame<Backend> &>(
             *(this->working_buffer.begin() - sizeof(ChecksumFrame<Backend>))); // align should not fail
 
         auto read_header = [&](off_t offset) -> bool {
-            std::cout << fmt::format("read_header: {} offset {}\n", in->getFileName(), offset);
+            std::cout << fmt::format("read_header: {} offset {} excepted {}\n", in->getFileName(), offset, sizeof(ChecksumFrame<Backend>));
             auto header_length
                 = expectRead(working_buffer.begin() - sizeof(ChecksumFrame<Backend>), sizeof(ChecksumFrame<Backend>), offset);
             if (header_length == 0)
@@ -259,7 +258,7 @@ public:
         };
 
         auto read_body = [&](off_t offset) {
-            std::cout << fmt::format("read_body: {} offset {}\n", in->getFileName(), offset);
+            std::cout << fmt::format("read_body: {} offset {} excepted {}\n", in->getFileName(), offset, frame.bytes);
             auto body_length = expectRead(buffer, frame.bytes, offset);
             if (unlikely(body_length != frame.bytes))
             {
@@ -283,7 +282,7 @@ public:
             position() += amount;
             buffer += amount;
         }
-        auto offset = getPositionInFile();
+        auto offset = current_frame == -1ull ? 0 : (current_frame + 1) * (frame_size + sizeof(ChecksumFrame<Backend>));
         // now, we are at the beginning of the next frame
         while (size >= frame_size)
         {
@@ -345,6 +344,7 @@ private:
             {
                 count = in->pread(pos, expected, offset);
             }
+            std::cout << fmt::format("read {} offset {} excepted {} actual {}\n", in->getFileName(), offset, expected, count);
             if (count == 0)
             {
                 break;

@@ -89,7 +89,7 @@ auto prepareIO()
 {
     auto rate_limiter = std::make_shared<DB::IORateLimiter>();
     auto key_manager = std::make_shared<DB::MockKeyManager>();
-    auto file_provider = std::make_shared<DB::FileProvider>(key_manager, true);
+    auto file_provider = std::make_shared<DB::FileProvider>(key_manager, false);
     return std::make_pair(std::move(rate_limiter), std::move(file_provider));
 }
 
@@ -211,17 +211,20 @@ try
         auto buffer = FramedChecksumWriteBuffer<D>(file);
         buffer.write(data.data(), data.size());
     }
+    std::cout << fmt::format("runReadBigTest: write {} size {}\n", filename, data.size());
     {
         auto file = provider->newRandomAccessFile(filename, {"/tmp/test.enc", "test.enc"}, limiter->getReadLimiter());
         auto buffer = FramedChecksumReadBuffer<D>(file);
         buffer.readBig(compare.data(), compare.size());
         ASSERT_EQ(std::memcmp(compare.data(), data.data(), data.size()), 0) << "seed: " << seed;
     }
+    std::cout << fmt::format("runReadBigTest: readBig {} succ\n", filename);
 
     for (size_t i = 1; i <= data.size() / 2; i <<= 1)
     {
         auto file = provider->newRandomAccessFile(filename, {"/tmp/test.enc", "test.enc"}, limiter->getReadLimiter());
         auto buffer = FramedChecksumReadBuffer<D>(file);
+        std::cout << fmt::format("runReadBigTest: {} seek {} read {}\n", filename, i, i);
         buffer.seek(static_cast<ssize_t>(i));
         buffer.readBig(compare.data(), i);
         ASSERT_EQ(std::memcmp(compare.data(), data.data() + i, i), 0) << "seed: " << seed;

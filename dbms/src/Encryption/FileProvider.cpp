@@ -48,8 +48,6 @@ RandomAccessFilePtr FileProvider::newRandomAccessFile(
         file = std::make_shared<PosixRandomAccessFile>(file_path_, flags, read_limiter);
     }
     auto encryption_info = key_manager->getFile(encryption_path_.full_path);
-    std::cout << fmt::format("encryption_path: {}, encryption_info: {}.{}\n",
-        encryption_path_.full_path, magic_enum::enum_name(encryption_info.res), magic_enum::enum_name(encryption_info.method));
     if (encryption_info.res != FileEncryptionRes::Disabled && encryption_info.method != EncryptionMethod::Plaintext)
     {
         file = std::make_shared<EncryptedRandomAccessFile>(
