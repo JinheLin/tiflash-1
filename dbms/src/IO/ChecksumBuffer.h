@@ -235,13 +235,15 @@ public:
 
     size_t readBig(char * buffer, size_t size) override
     {
+        std::cout << fmt::format("readBig: {}\n", in->getFileName());
         const auto expected = size;
         auto & frame = reinterpret_cast<ChecksumFrame<Backend> &>(
             *(this->working_buffer.begin() - sizeof(ChecksumFrame<Backend>))); // align should not fail
 
-        auto read_header = [&]() -> bool {
+        auto read_header = [&](off_t offset) -> bool {
+            std::cout << fmt::format("read_header: {} offset {}\n", in->getFileName(), offset);
             auto header_length
-                = expectRead(working_buffer.begin() - sizeof(ChecksumFrame<Backend>), sizeof(ChecksumFrame<Backend>));
+                = expectRead(working_buffer.begin() - sizeof(ChecksumFrame<Backend>), sizeof(ChecksumFrame<Backend>), offset);
             if (header_length == 0)
                 return false;
             if (unlikely(header_length != sizeof(ChecksumFrame<Backend>)))
@@ -256,8 +258,9 @@ public:
             return true;
         };
 
-        auto read_body = [&]() {
-            auto body_length = expectRead(buffer, frame.bytes);
+        auto read_body = [&](off_t offset) {
+            std::cout << fmt::format("read_body: {} offset {}\n", in->getFileName(), offset);
+            auto body_length = expectRead(buffer, frame.bytes, offset);
             if (unlikely(body_length != frame.bytes))
             {
                 throw TiFlashException(
@@ -267,6 +270,7 @@ public:
                         frame.bytes),
                     Errors::Checksum::IOFailure);
             }
+            return body_length;
         };
 
         // firstly, if we have read some bytes
@@ -279,19 +283,21 @@ public:
             position() += amount;
             buffer += amount;
         }
-
+        auto offset = getPositionInFile();
         // now, we are at the beginning of the next frame
         while (size >= frame_size)
         {
             // read the header to our own memory area
             // if read_header returns false, then we are at the end of file
-            if (!read_header())
+            if (!read_header(offset))
             {
                 return expected - size;
             }
+            offset += sizeof(ChecksumFrame<Backend>);
 
             // read the body
-            read_body();
+            auto body_length = read_body(offset);
+            offset += body_length;
 
             // check body
             if (!skip_checksum)
@@ -329,7 +335,7 @@ private:
     const size_t frame_size;
     const bool skip_checksum;
     RandomAccessFilePtr in;
-    size_t expectRead(Position pos, size_t size)
+    size_t expectRead(Position pos, size_t size, off_t offset)
     {
         size_t expected = size;
         while (expected != 0)
@@ -337,7 +343,7 @@ private:
             ProfileEvents::increment(ProfileEvents::ReadBufferFromFileDescriptorRead);
             ssize_t count;
             {
-                count = in->read(pos, expected);
+                count = in->pread(pos, expected, offset);
             }
             if (count == 0)
             {
@@ -390,7 +396,7 @@ private:
         // read header and body
         auto length = expectRead(
             working_buffer.begin() - sizeof(ChecksumFrame<Backend>),
-            sizeof(ChecksumFrame<Backend>) + frame_size);
+            sizeof(ChecksumFrame<Backend>) + frame_size, getPositionInFile());
         if (length == 0)
             return false; // EOF
         if (unlikely(length != sizeof(ChecksumFrame<Backend>) + frame.bytes))
@@ -440,16 +446,17 @@ private:
         {
             // read the header and the body
             auto header_offset = target_frame * (sizeof(ChecksumFrame<Backend>) + frame_size);
+            /*
             auto result = in->seek(static_cast<off_t>(header_offset), SEEK_SET);
             if (result == -1)
             {
                 throw TiFlashException(
                     "checksum framed file " + in->getFileName() + " is not seekable",
                     Errors::Checksum::IOFailure);
-            }
+            }*/
             auto length = expectRead(
                 working_buffer.begin() - sizeof(ChecksumFrame<Backend>),
-                sizeof(ChecksumFrame<Backend>) + frame_size);
+                sizeof(ChecksumFrame<Backend>) + frame_size, header_offset);
             if (length == 0)
             {
                 current_frame = target_frame;
