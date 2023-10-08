@@ -29,7 +29,7 @@
 #include <Storages/DeltaMerge/DMChecksumConfig.h>
 #include <Storages/Page/PageUtil.h>
 #include <fmt/format.h>
-
+#include <TestUtils/TiFlashTestBasic.h>
 #include <random>
 
 namespace DB
@@ -101,6 +101,7 @@ auto prepareIO()
 
 template <class D>
 void runStreamingTest()
+try
 {
     const std::string filename = fmt::format(
         "{}_{}_{}",
@@ -127,6 +128,7 @@ void runStreamingTest()
     Poco::File file{filename};
     file.remove();
 }
+CATCH
 
 TEST_STREAM(None)
 TEST_STREAM(CRC32)
@@ -142,6 +144,7 @@ TEST_STREAM(XXH3)
 
 template <class D>
 void runSeekingTest()
+try
 {
     const std::string filename = fmt::format(
         "{}_{}_{}",
@@ -184,6 +187,7 @@ void runSeekingTest()
     Poco::File file{filename};
     file.remove();
 }
+CATCH
 
 TEST_SEEK(None)
 TEST_SEEK(CRC32)
@@ -193,6 +197,7 @@ TEST_SEEK(XXH3)
 
 template <class D>
 void runReadBigTest()
+try
 {
     const std::string filename = fmt::format(
         "{}_{}_{}",
@@ -228,6 +233,7 @@ void runReadBigTest()
     Poco::File file{filename};
     file.remove();
 }
+CATCH
 
 #define TEST_BIG_READING(ALGO)              \
     TEST(ChecksumBuffer##ALGO, BigReading)  \
@@ -243,6 +249,7 @@ TEST_BIG_READING(XXH3)
 
 template <ChecksumAlgo D>
 void runStackingTest()
+try
 {
     const std::string filename = fmt::format(
         "{}_{}_{}",
@@ -284,6 +291,7 @@ void runStackingTest()
     Poco::File file{filename};
     file.remove();
 }
+CATCH
 
 #define TEST_STACKING(ALGO)                    \
     TEST(DMChecksumBuffer##ALGO, Stacking)     \
@@ -300,6 +308,7 @@ TEST_STACKING(XXH3)
 
 template <ChecksumAlgo D>
 void runStackedSeekingTest()
+try
 {
     const std::string filename = fmt::format(
         "{}_{}_{}",
@@ -360,6 +369,7 @@ void runStackedSeekingTest()
     Poco::File file{filename};
     file.remove();
 }
+CATCH
 
 #define TEST_STACKED_SEEKING(ALGO)                       \
     TEST(DMChecksumBuffer##ALGO, StackedSeeking)         \
