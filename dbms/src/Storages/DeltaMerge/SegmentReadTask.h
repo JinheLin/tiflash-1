@@ -16,7 +16,7 @@
 
 #include <Storages/DeltaMerge/Remote/DisaggTaskId.h>
 #include <Storages/DeltaMerge/Remote/Proto/remote.pb.h>
-#include <Storages/DeltaMerge/Remote/RNLocalPageCache_fwd.h>
+#include <Storages/DeltaMerge/Remote/RNLocalPageCache.h>
 #include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/Segment.h>
 #include <Storages/KVStore/Types.h>
@@ -66,7 +66,7 @@ struct SegmentReadTask
     BlockInputStreamPtr input_stream;
 
     SegmentReadTask(
-        const SegmentPtr & segment_, //
+        const SegmentPtr & segment_,
         const SegmentSnapshotPtr & read_snapshot_,
         const RowKeyRanges & ranges_ = {});
 
@@ -89,19 +89,24 @@ struct SegmentReadTask
 
     static SegmentReadTasks trySplitReadTasks(const SegmentReadTasks & tasks, size_t expected_size);
 
-    String info() const { return extra_remote_info.has_value() ? extra_remote_info->remote_segment_id.toString() : ""; }
+    String info() const;
 
     void initColumnFileDataProvider(const Remote::RNLocalPageCacheGuardPtr & pages_guard);
+
     void initInputStream(
         const ColumnDefines & columns_to_read,
         UInt64 read_tso,
         const PushDownFilterPtr & push_down_filter,
         ReadMode read_mode);
-    BlockInputStreamPtr getInputStream() const
-    {
-        RUNTIME_CHECK(input_stream != nullptr);
-        return input_stream;
-    }
+
+    BlockInputStreamPtr getInputStream() const;
+
+    Remote::RNLocalPageCache::OccupySpaceResult blockingOccupySpaceForTask() const;
+
+    disaggregated::FetchDisaggPagesRequest buildFetchPagesRequest(
+        const std::vector<Remote::PageOID> & pages_not_in_cache) const;
+
+    void fetchPages(const pingcap::kv::Cluster * cluster, const disaggregated::FetchDisaggPagesRequest & request);
 };
 
 } // namespace DB::DM

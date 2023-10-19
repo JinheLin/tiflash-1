@@ -15,7 +15,7 @@
 #pragma once
 
 #include <Common/ThreadedWorker.h>
-#include <Storages/DeltaMerge/Remote/RNReadTask.h>
+#include <Storages/DeltaMerge/SegmentReadTask.h>
 #include <pingcap/kv/Cluster.h>
 
 #include <boost/noncopyable.hpp>
@@ -35,9 +35,6 @@ protected:
     SegmentReadTaskPtr doWork(const SegmentReadTaskPtr & task) override;
 
     String getName() const noexcept override { return "FetchPages"; }
-
-private:
-    void doFetchPages(const SegmentReadTaskPtr & seg_task, const disaggregated::FetchDisaggPagesRequest & request);
 
 private:
     const pingcap::kv::Cluster * cluster;
