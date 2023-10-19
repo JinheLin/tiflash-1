@@ -35,9 +35,6 @@ protected:
 
     String getName() const noexcept override { return "FetchPages"; }
 
-private:
-    void doFetchPages(const SegmentReadTaskPtr & seg_task, const disaggregated::FetchDisaggPagesRequest & request);
-
 public:
     struct Options
     {

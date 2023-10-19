@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Common/TiFlashMetrics.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/SharedContexts/Disagg.h>
 #include <Storages/DeltaMerge/DeltaIndex.h>
@@ -50,13 +49,6 @@ bool RNWorkerPrepareStreams::initInputStream(const SegmentReadTaskPtr & task, bo
 
 SegmentReadTaskPtr RNWorkerPrepareStreams::doWork(const SegmentReadTaskPtr & task)
 {
-    Stopwatch watch_work{CLOCK_MONOTONIC_COARSE};
-    SCOPE_EXIT({
-        // This metric is per-segment.
-        GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_worker_prepare_stream)
-            .Observe(watch_work.elapsedSeconds());
-    });
-
     if (likely(
             initInputStream(task, task->dm_context->db_context.getSettingsRef().dt_enable_delta_index_error_fallback)))
     {

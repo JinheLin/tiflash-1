@@ -16,7 +16,7 @@
 
 #include <Common/ThreadedWorker.h>
 #include <Storages/DeltaMerge/Filter/PushDownFilter.h>
-#include <Storages/DeltaMerge/SegmentReadTaskPool.h>
+#include <Storages/DeltaMerge/SegmentReadTask.h>
 #include <pingcap/kv/Cluster.h>
 
 #include <boost/noncopyable.hpp>

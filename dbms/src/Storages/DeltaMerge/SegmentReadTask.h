@@ -16,7 +16,7 @@
 
 #include <Storages/DeltaMerge/Remote/DisaggTaskId.h>
 #include <Storages/DeltaMerge/Remote/Proto/remote.pb.h>
-#include <Storages/DeltaMerge/Remote/RNLocalPageCache_fwd.h>
+#include <Storages/DeltaMerge/Remote/RNLocalPageCache.h>
 #include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/Segment.h>
 #include <Storages/KVStore/Types.h>
@@ -62,7 +62,7 @@ struct SegmentReadTask
 
     // Constructor for op-mode.
     SegmentReadTask(
-        const SegmentPtr & segment_, //
+        const SegmentPtr & segment_,
         const SegmentSnapshotPtr & read_snapshot_,
         const DMContextPtr & dm_context_,
         const RowKeyRanges & ranges_ = {});
@@ -113,6 +113,13 @@ struct SegmentReadTask
             .segment_epoch = segment->segmentEpoch(),
         };
     }
+
+    Remote::RNLocalPageCache::OccupySpaceResult blockingOccupySpaceForTask() const;
+
+    disaggregated::FetchDisaggPagesRequest buildFetchPagesRequest(
+        const std::vector<Remote::PageOID> & pages_not_in_cache) const;
+
+    void fetchPages(const disaggregated::FetchDisaggPagesRequest & request);
 };
 
 // Used in SegmentReadTaskScheduler, SegmentReadTaskPool.
