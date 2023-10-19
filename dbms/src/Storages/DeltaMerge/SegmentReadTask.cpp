@@ -225,6 +225,12 @@ void SegmentReadTask::initInputStream(
     ReadMode read_mode)
 {
     RUNTIME_CHECK(input_stream == nullptr);
+    Stopwatch watch_work{CLOCK_MONOTONIC_COARSE};
+    SCOPE_EXIT({
+        GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_worker_prepare_stream)
+            .Observe(watch_work.elapsedSeconds());
+    });
+
     input_stream = segment->getInputStream(
         read_mode,
         *(extra_remote_info->dm_context),
@@ -272,7 +278,6 @@ Remote::RNLocalPageCache::OccupySpaceResult SegmentReadTask::blockingOccupySpace
 
     Stopwatch w_occupy;
     auto occupy_result = page_cache->occupySpace(cf_tiny_oids, extra_info.remote_page_sizes, scan_context);
-    // This metric is per-segment.
     GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_cache_occupy).Observe(w_occupy.elapsedSeconds());
 
     return occupy_result;
@@ -297,7 +302,6 @@ disaggregated::FetchDisaggPagesRequest SegmentReadTask::buildFetchPagesRequest(
 
     return req;
 }
-
 
 // In order to make network and disk run parallelly,
 // `doFetchPages` will receive data pages from WN,
