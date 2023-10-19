@@ -327,18 +327,19 @@ void SegmentReadTask::fetchPages(
     if (request.page_ids_size() == 0)
         return;
 
+    UInt64 read_page_ns = 0;
+    UInt64 deserialize_page_ns = 0;
+    UInt64 wait_write_page_ns = 0;
+
     Stopwatch sw_total;
-    Stopwatch watch_rpc{CLOCK_MONOTONIC_COARSE};
-    bool rpc_is_observed = false;
-    double total_write_page_cache_sec = 0.0;
 
     pingcap::kv::RpcCall<pingcap::kv::RPC_NAME(FetchDisaggPages)> rpc(
         cluster->rpc_client,
         extra_remote_info->store_address);
-
     grpc::ClientContext client_context;
+    Stopwatch sw_rpc_call;
     auto stream_resp = rpc.call(&client_context, request);
-
+    read_page_ns += sw_rpc_call.elapsed();
     SCOPE_EXIT({
         // TODO: Not sure whether we really need this. Maybe RAII is already there?
         stream_resp->Finish();
@@ -349,21 +350,18 @@ void SegmentReadTask::fetchPages(
     for (auto p : request.page_ids())
         remaining_pages_to_fetch.insert(p);
 
-    UInt64 read_stream_ns = 0;
-    UInt64 deserialize_page_ns = 0;
-    UInt64 schedule_write_page_ns = 0;
     UInt64 packet_count = 0;
     UInt64 task_count = 0;
-    UInt64 page_count = request.page_ids_size();
+    const UInt64 page_count = request.page_ids_size();
 
-    auto schedule_task = [&task_count, &schedule_write_page_ns](WritePageTaskPtr && write_page_task) {
+    auto schedule_task = [&task_count, &wait_write_page_ns](WritePageTaskPtr && write_page_task) {
         task_count += 1;
         auto task = std::make_shared<std::packaged_task<void()>>([write_page_task = std::move(write_page_task)]() {
             write_page_task->page_cache->write(std::move(write_page_task->wb));
         });
         Stopwatch sw;
         RNWritePageCachePool::get().scheduleOrThrowOnError([task]() { (*task)(); });
-        schedule_write_page_ns += sw.elapsed();
+        wait_write_page_ns += sw.elapsed();
         return task->get_future();
     };
 
@@ -373,35 +371,21 @@ void SegmentReadTask::fetchPages(
     // Keep reading packets.
     while (true)
     {
-        Stopwatch sw_packet;
+        Stopwatch sw_read_packet;
         auto packet = std::make_shared<disaggregated::PagesPacket>();
         if (bool more = stream_resp->Read(packet.get()); !more)
             break;
-
-        MemTrackerWrapper packet_mem_tracker_wrapper(packet->SpaceUsedLong(), fetch_pages_mem_tracker.get());
-
-        read_stream_ns += sw_packet.elapsedFromLastTime();
-        packet_count += 1;
-        if (!rpc_is_observed)
-        {
-            // Count RPC time as sending request + receive first response packet.
-            rpc_is_observed = true;
-            // This metric is per-segment, because we only count once for each task.
-            GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_rpc_fetch_page)
-                .Observe(watch_rpc.elapsedSeconds());
-        }
-
         if (packet->has_error())
-        {
             throw Exception(fmt::format("{} (from {})", packet->error().msg(), info()));
-        }
 
-        Stopwatch watch_write_page_cache{CLOCK_MONOTONIC_COARSE};
-        SCOPE_EXIT({ total_write_page_cache_sec += watch_write_page_cache.elapsedSeconds(); });
+        read_page_ns = sw_read_packet.elapsed();
+        packet_count += 1;
+        MemTrackerWrapper packet_mem_tracker_wrapper(packet->SpaceUsedLong(), fetch_pages_mem_tracker.get());
 
         std::vector<UInt64> received_page_ids;
         for (const String & page : packet->pages())
         {
+            Stopwatch sw;
             if (write_page_task == nullptr)
             {
                 write_page_task = std::make_unique<WritePageTask>(
@@ -438,7 +422,7 @@ void SegmentReadTask::fetchPages(
             {
                 field_sizes.emplace_back(field_sz);
             }
-            deserialize_page_ns += sw_packet.elapsedFromLastTime();
+            deserialize_page_ns += sw.elapsed();
 
             auto page_id = Remote::RNLocalPageCache::buildCacheId(oid);
             write_page_task->wb
@@ -463,11 +447,7 @@ void SegmentReadTask::fetchPages(
     {
         f.get();
     }
-    auto wait_write_page_finished_ns = sw_wait_write_page_finished.elapsed();
-
-    // This metric is per-segment.
-    GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_write_page_cache)
-        .Observe(total_write_page_cache_sec);
+    wait_write_page_ns += sw_wait_write_page_finished.elapsed();
 
     // Verify all pending pages are now received.
     RUNTIME_CHECK_MSG(
@@ -476,20 +456,25 @@ void SegmentReadTask::fetchPages(
         info(),
         remaining_pages_to_fetch);
 
+    GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_rpc_fetch_page)
+        .Observe(read_page_ns / 1000000000.0);
+    GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_deserialize_page)
+        .Observe(deserialize_page_ns / 1000000000.0);
+    GET_METRIC(tiflash_disaggregated_breakdown_duration_seconds, type_write_page_cache)
+        .Observe(wait_write_page_ns / 1000000000.0);
+
     LOG_DEBUG(
         read_snapshot->log,
         "Finished fetch pages, seg_task={}, page_count={}, packet_count={}, task_count={}, "
-        "total_ms={}, read_stream_ms={}, deserialize_page_ms={}, schedule_write_page_ms={}, "
-        "wait_write_page_finished_ms={}",
+        "total_ms={}, read_stream_ms={}, deserialize_page_ms={}, schedule_write_page_ms={}",
         info(),
         page_count,
         packet_count,
         task_count,
         sw_total.elapsed() / 1000000,
-        read_stream_ns / 1000000,
+        read_page_ns / 1000000,
         deserialize_page_ns / 1000000,
-        schedule_write_page_ns / 1000000,
-        wait_write_page_finished_ns / 1000000);
+        wait_write_page_ns / 1000000);
 }
 
 } // namespace DB::DM
