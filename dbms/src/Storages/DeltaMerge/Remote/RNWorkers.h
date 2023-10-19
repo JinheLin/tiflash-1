@@ -50,7 +50,6 @@ public:
         const UInt64 read_tso;
         const PushDownFilterPtr & push_down_filter;
         const ReadMode read_mode;
-        const pingcap::kv::Cluster * cluster;
     };
 
     explicit RNWorkers(const Context & context, const Options & options, size_t num_streams);

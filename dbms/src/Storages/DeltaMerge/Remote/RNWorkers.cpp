@@ -44,7 +44,6 @@ RNWorkers::RNWorkers(const Context & context, const Options & options, size_t nu
         .result_queue = std::make_shared<Channel>(n),
         .log = options.log,
         .concurrency = fetch_pages_concurrency,
-        .cluster = options.cluster,
     });
 
     worker_prepare_streams = RNWorkerPrepareStreams::create({

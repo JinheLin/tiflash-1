@@ -58,7 +58,7 @@ SegmentReadTaskPtr RNWorkerFetchPages::doWork(const SegmentReadTaskPtr & seg_tas
     {
         try
         {
-            seg_task->fetchPages(cluster, req);
+            seg_task->fetchPages(req);
             seg_task->initColumnFileDataProvider(occupy_result.pages_guard);
 
             // We finished fetch all pages for this seg task, just return it for downstream

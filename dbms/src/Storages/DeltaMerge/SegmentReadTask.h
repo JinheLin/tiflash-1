@@ -106,7 +106,7 @@ struct SegmentReadTask
     disaggregated::FetchDisaggPagesRequest buildFetchPagesRequest(
         const std::vector<Remote::PageOID> & pages_not_in_cache) const;
 
-    void fetchPages(const pingcap::kv::Cluster * cluster, const disaggregated::FetchDisaggPagesRequest & request);
+    void fetchPages(const disaggregated::FetchDisaggPagesRequest & request);
 };
 
 } // namespace DB::DM

@@ -525,7 +525,6 @@ DM::Remote::RNWorkersPtr StorageDisaggregated::buildRNWorkers(
             .read_tso = read_tso,
             .push_down_filter = push_down_filter,
             .read_mode = read_mode,
-            .cluster = db_context.getTMTContext().getKVCluster(),
         },
         num_streams);
 }

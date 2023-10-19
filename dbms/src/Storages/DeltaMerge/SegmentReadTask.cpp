@@ -22,6 +22,7 @@
 #include <Storages/DeltaMerge/Remote/Serializer.h>
 #include <Storages/DeltaMerge/RowKeyRangeUtils.h>
 #include <Storages/DeltaMerge/SegmentReadTask.h>
+#include <Storages/KVStore/TMTContext.h>
 #include <Storages/Page/V3/Universal/UniversalWriteBatchImpl.h>
 
 namespace CurrentMetrics
@@ -319,9 +320,7 @@ struct WritePageTask
 };
 using WritePageTaskPtr = std::unique_ptr<WritePageTask>;
 
-void SegmentReadTask::fetchPages(
-    const pingcap::kv::Cluster * cluster,
-    const disaggregated::FetchDisaggPagesRequest & request)
+void SegmentReadTask::fetchPages(const disaggregated::FetchDisaggPagesRequest & request)
 {
     // No page need to be fetched.
     if (request.page_ids_size() == 0)
@@ -332,7 +331,7 @@ void SegmentReadTask::fetchPages(
     UInt64 wait_write_page_ns = 0;
 
     Stopwatch sw_total;
-
+    const auto * cluster = extra_remote_info->dm_context->db_context.getTMTContext().getKVCluster();
     pingcap::kv::RpcCall<pingcap::kv::RPC_NAME(FetchDisaggPages)> rpc(
         cluster->rpc_client,
         extra_remote_info->store_address);
