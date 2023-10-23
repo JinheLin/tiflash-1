@@ -33,9 +33,11 @@ namespace DB::DM
 SegmentReadTask::SegmentReadTask(
     const SegmentPtr & segment_, //
     const SegmentSnapshotPtr & read_snapshot_,
+    const DMContextPtr & dm_context_,
     const RowKeyRanges & ranges_)
     : segment(segment_)
     , read_snapshot(read_snapshot_)
+    , dm_context(dm_context_)
     , ranges(ranges_)
 {
     CurrentMetrics::add(CurrentMetrics::DT_SegmentReadTasks);
@@ -63,7 +65,7 @@ SegmentReadTask::SegmentReadTask(
     auto rb = ReadBufferFromString(proto.key_range());
     auto segment_range = RowKeyRange::deserialize(rb);
 
-    auto dm_context = std::make_shared<DMContext>(
+    dm_context = std::make_shared<DMContext>(
         db_context,
         /* path_pool */ nullptr,
         /* storage_pool */ nullptr,
@@ -124,7 +126,6 @@ SegmentReadTask::SegmentReadTask(
         .snapshot_id = snapshot_id,
         .remote_page_ids = std::move(remote_page_ids),
         .remote_page_sizes = std::move(remote_page_sizes),
-        .dm_context = dm_context,
     });
 
     LOG_DEBUG(
@@ -179,10 +180,12 @@ SegmentReadTasks SegmentReadTask::trySplitReadTasks(const SegmentReadTasks & tas
         auto left = std::make_shared<SegmentReadTask>(
             top->segment,
             top->read_snapshot->clone(),
+            top->dm_context,
             RowKeyRanges(top->ranges.begin(), top->ranges.begin() + split_count));
         auto right = std::make_shared<SegmentReadTask>(
             top->segment,
             top->read_snapshot->clone(),
+            top->dm_context,
             RowKeyRanges(top->ranges.begin() + split_count, top->ranges.end()));
 
         largest_ranges_first.push(left);
@@ -205,7 +208,7 @@ void SegmentReadTask::initColumnFileDataProvider(const Remote::RNLocalPageCacheG
     RUNTIME_CHECK(std::dynamic_pointer_cast<ColumnFileDataProviderNop>(data_provider));
 
     RUNTIME_CHECK(extra_remote_info.has_value());
-    auto page_cache = extra_remote_info->dm_context->db_context.getSharedContextDisagg()->rn_page_cache;
+    auto page_cache = dm_context->db_context.getSharedContextDisagg()->rn_page_cache;
     const auto & remote_seg_id = extra_remote_info->remote_segment_id;
     data_provider = std::make_shared<Remote::ColumnFileDataProviderRNLocalPageCache>(
         page_cache,
@@ -223,7 +226,7 @@ void SegmentReadTask::initInputStream(
     RUNTIME_CHECK(input_stream == nullptr);
     input_stream = segment->getInputStream(
         read_mode,
-        *(extra_remote_info->dm_context),
+        *dm_context,
         columns_to_read,
         read_snapshot,
         ranges,

@@ -54,13 +54,13 @@ struct ExtraRemoteSegmentInfo
     DisaggTaskId snapshot_id;
     std::vector<UInt64> remote_page_ids;
     std::vector<UInt64> remote_page_sizes;
-    DMContextPtr dm_context;
 };
 
 struct SegmentReadTask
 {
     SegmentPtr segment;
     SegmentSnapshotPtr read_snapshot;
+    DMContextPtr dm_context;
     RowKeyRanges ranges;
 
     std::optional<ExtraRemoteSegmentInfo> extra_remote_info;
@@ -71,6 +71,7 @@ struct SegmentReadTask
     SegmentReadTask(
         const SegmentPtr & segment_, //
         const SegmentSnapshotPtr & read_snapshot_,
+        const DMContextPtr & dm_context_,
         const RowKeyRanges & ranges_ = {});
 
     // Constructor for disaggregated-mode.

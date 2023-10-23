@@ -60,7 +60,7 @@ SegmentReadTaskPtr RNWorkerPrepareStreams::doWork(const SegmentReadTaskPtr & tas
 
     if (likely(initInputStream(
             task,
-            task->extra_remote_info->dm_context->db_context.getSettingsRef().dt_enable_delta_index_error_fallback)))
+            task->dm_context->db_context.getSettingsRef().dt_enable_delta_index_error_fallback)))
     {
         return task;
     }
@@ -68,7 +68,7 @@ SegmentReadTaskPtr RNWorkerPrepareStreams::doWork(const SegmentReadTaskPtr & tas
     // Exception DT_DELTA_INDEX_ERROR raised. Reset delta index and try again.
     DeltaIndex empty_delta_index;
     task->read_snapshot->delta->getSharedDeltaIndex()->swap(empty_delta_index);
-    if (auto cache = task->extra_remote_info->dm_context->db_context.getSharedContextDisagg()->rn_delta_index_cache;
+    if (auto cache = task->dm_context->db_context.getSharedContextDisagg()->rn_delta_index_cache;
         cache)
     {
         cache->setDeltaIndex(task->read_snapshot->delta->getSharedDeltaIndex());

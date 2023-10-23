@@ -62,7 +62,7 @@ RNLocalPageCache::OccupySpaceResult blockingOccupySpaceForTask(const SegmentRead
     // because we send one request each seg_task. If we want to split
     // FetchPagesRequest into multiples in future, then we need to change
     // the moment of calling `occupySpace`.
-    const auto & dm_context = extra_info.dm_context;
+    const auto & dm_context = seg_task->dm_context;
     auto page_cache = dm_context->db_context.getSharedContextDisagg()->rn_page_cache;
     auto scan_context = dm_context->scan_context;
 
@@ -260,7 +260,7 @@ void RNWorkerFetchPages::doFetchPages(
             if (write_page_task == nullptr)
             {
                 write_page_task = std::make_unique<WritePageTask>(
-                    seg_task->extra_remote_info->dm_context->db_context.getSharedContextDisagg()->rn_page_cache.get());
+                    seg_task->dm_context->db_context.getSharedContextDisagg()->rn_page_cache.get());
             }
             auto & remote_page = write_page_task->remote_pages.emplace_back(); // NOLINT(bugprone-use-after-move)
             bool parsed = remote_page.ParseFromString(page);
@@ -299,7 +299,7 @@ void RNWorkerFetchPages::doFetchPages(
             write_page_task->wb
                 .putPage(page_id, 0, std::move(read_buffer), remote_page.data().size(), std::move(field_sizes));
             auto write_batch_limit_size
-                = seg_task->extra_remote_info->dm_context->db_context.getSettingsRef().dt_write_page_cache_limit_size;
+                = seg_task->dm_context->db_context.getSettingsRef().dt_write_page_cache_limit_size;
             if (write_page_task->wb.getTotalDataSize() >= write_batch_limit_size)
             {
                 write_page_results.push_back(
