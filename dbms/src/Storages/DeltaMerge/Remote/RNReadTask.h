@@ -29,15 +29,15 @@ using RNReadTaskPtr = std::shared_ptr<RNReadTask>;
 class RNReadTask : boost::noncopyable
 {
 public:
-    const std::vector<SegmentReadTaskPtr> segment_read_tasks;
+    const DM::SegmentReadTasks segment_read_tasks;
 
-    static RNReadTaskPtr create(const std::vector<SegmentReadTaskPtr> & segment_read_tasks_)
+    static RNReadTaskPtr create(const DM::SegmentReadTasks & segment_read_tasks_)
     {
         return std::shared_ptr<RNReadTask>(new RNReadTask(segment_read_tasks_));
     }
 
 private:
-    explicit RNReadTask(const std::vector<SegmentReadTaskPtr> & segment_read_tasks_)
+    explicit RNReadTask(const DM::SegmentReadTasks & segment_read_tasks_)
         : segment_read_tasks(segment_read_tasks_)
     {}
 };

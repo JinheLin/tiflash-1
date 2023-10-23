@@ -118,14 +118,14 @@ void StorageDisaggregated::readThroughS3(
     filterConditions(exec_context, group_builder, *analyzer);
 }
 
-DM::Remote::RNReadTaskPtr StorageDisaggregated::buildReadTaskWithBackoff(const Context & db_context)
+DM::SegmentReadTasks StorageDisaggregated::buildReadTaskWithBackoff(const Context & db_context)
 {
     using namespace pingcap;
 
     auto scan_context = std::make_shared<DM::ScanContext>();
     context.getDAGContext()->scan_context_map[table_scan.getTableScanExecutorID()] = scan_context;
 
-    DM::Remote::RNReadTaskPtr read_task;
+    DM::SegmentReadTasks read_task;
 
     double total_backoff_seconds = 0.0;
     SCOPE_EXIT({
@@ -161,7 +161,7 @@ DM::Remote::RNReadTaskPtr StorageDisaggregated::buildReadTaskWithBackoff(const C
     return read_task;
 }
 
-DM::Remote::RNReadTaskPtr StorageDisaggregated::buildReadTask(
+DM::SegmentReadTasks StorageDisaggregated::buildReadTask(
     const Context & db_context,
     const DM::ScanContextPtr & scan_context)
 {
@@ -178,7 +178,7 @@ DM::Remote::RNReadTaskPtr StorageDisaggregated::buildReadTask(
     }
 
     std::mutex output_lock;
-    std::vector<DM::SegmentReadTaskPtr> output_seg_tasks;
+    DM::SegmentReadTasks output_seg_tasks;
 
     // Then, for each BatchCopTask, let's build read tasks concurrently.
     auto thread_manager = newThreadManager();
@@ -199,7 +199,7 @@ DM::Remote::RNReadTaskPtr StorageDisaggregated::buildReadTask(
         // TODO
     }
 
-    return DM::Remote::RNReadTask::create(output_seg_tasks);
+    return output_seg_tasks;
 }
 
 void StorageDisaggregated::buildReadTaskForWriteNode(
@@ -207,7 +207,7 @@ void StorageDisaggregated::buildReadTaskForWriteNode(
     const DM::ScanContextPtr & scan_context,
     const pingcap::coprocessor::BatchCopTask & batch_cop_task,
     std::mutex & output_lock,
-    std::vector<DM::SegmentReadTaskPtr> & output_seg_tasks)
+    DM::SegmentReadTasks & output_seg_tasks)
 {
     Stopwatch watch;
 
@@ -353,7 +353,7 @@ void StorageDisaggregated::buildReadTaskForWriteNodeTable(
     const String & store_address,
     const String & serialized_physical_table,
     std::mutex & output_lock,
-    std::vector<DM::SegmentReadTaskPtr> & output_seg_tasks)
+    DM::SegmentReadTasks & output_seg_tasks)
 {
     DB::DM::RemotePb::RemotePhysicalTable table;
     auto parse_ok = table.ParseFromString(serialized_physical_table);
@@ -485,7 +485,7 @@ DM::RSOperatorPtr StorageDisaggregated::buildRSOperator(
 
 DM::Remote::RNWorkersPtr StorageDisaggregated::buildRNWorkers(
     const Context & db_context,
-    const DM::Remote::RNReadTaskPtr & read_task,
+    const DM::SegmentReadTasks & read_task,
     const DM::ColumnDefinesPtr & column_defines,
     size_t num_streams)
 {
@@ -512,7 +512,7 @@ DM::Remote::RNWorkersPtr StorageDisaggregated::buildRNWorkers(
         magic_enum::enum_name(read_mode),
         table_scan.isFastScan(),
         table_scan.keepOrder(),
-        read_task->segment_read_tasks.size(),
+        read_task.size(),
         num_streams,
         *column_defines);
 
@@ -520,7 +520,7 @@ DM::Remote::RNWorkersPtr StorageDisaggregated::buildRNWorkers(
         db_context,
         {
             .log = log->getChild(executor_id),
-            .read_task = read_task,
+            .read_task = DM::Remote::RNReadTask::create(read_task),
             .columns_to_read = column_defines,
             .read_tso = read_tso,
             .push_down_filter = push_down_filter,
@@ -532,7 +532,7 @@ DM::Remote::RNWorkersPtr StorageDisaggregated::buildRNWorkers(
 
 void StorageDisaggregated::buildRemoteSegmentInputStreams(
     const Context & db_context,
-    const DM::Remote::RNReadTaskPtr & read_task,
+    const DM::SegmentReadTasks & read_task,
     size_t num_streams,
     DAGPipeline & pipeline)
 {
@@ -571,7 +571,7 @@ void StorageDisaggregated::buildRemoteSegmentSourceOps(
     PipelineExecutorContext & exec_context,
     PipelineExecGroupBuilder & group_builder,
     const Context & db_context,
-    const DM::Remote::RNReadTaskPtr & read_task,
+    const DM::SegmentReadTasks & read_task,
     size_t num_streams)
 {
     // Build the input streams to read blocks from remote segments
