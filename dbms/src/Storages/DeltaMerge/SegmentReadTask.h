@@ -25,7 +25,7 @@ namespace DB::DM
 {
 struct SegmentReadTask;
 using SegmentReadTaskPtr = std::shared_ptr<SegmentReadTask>;
-using SegmentReadTasks = std::list<SegmentReadTaskPtr>;
+using SegmentReadTasks = std::deque<SegmentReadTaskPtr>;
 
 struct RemoteSegmentID
 {
