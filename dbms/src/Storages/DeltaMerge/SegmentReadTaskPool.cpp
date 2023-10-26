@@ -85,29 +85,17 @@ bool SegmentReadTasksWrapper::empty() const
 BlockInputStreamPtr SegmentReadTaskPool::buildInputStream(SegmentReadTaskPtr & t)
 {
     MemoryTrackerSetter setter(true, mem_tracker.get());
-    BlockInputStreamPtr stream;
-    auto block_size = std::max(
-        expected_block_size,
-        static_cast<size_t>(t->dm_context->db_context.getSettingsRef().dt_segment_stable_pack_rows));
-    stream = t->segment->getInputStream(
-        read_mode,
-        *(t->dm_context),
-        columns_to_read,
-        t->read_snapshot,
-        t->ranges,
-        filter,
-        max_version,
-        block_size);
-    stream = std::make_shared<AddExtraTableIDColumnInputStream>(
-        stream,
+    t->initInputStream(columns_to_read, max_version, filter, read_mode);
+    BlockInputStreamPtr stream = std::make_shared<AddExtraTableIDColumnInputStream>(
+        t->getInputStream(),
         extra_table_id_index,
         t->dm_context->physical_table_id);
     LOG_DEBUG(
         log,
-        "getInputStream succ, read_mode={}, pool_id={} segment_id={}",
+        "buildInputStream: read_mode={}, pool_id={} segment={}",
         magic_enum::enum_name(read_mode),
         pool_id,
-        t->segment->segmentId());
+        t);
     return stream;
 }
 
@@ -116,7 +104,6 @@ SegmentReadTaskPool::SegmentReadTaskPool(
     const ColumnDefines & columns_to_read_,
     const PushDownFilterPtr & filter_,
     uint64_t max_version_,
-    size_t expected_block_size_,
     ReadMode read_mode_,
     SegmentReadTasks && tasks_,
     AfterSegmentRead after_segment_read_,
@@ -129,7 +116,6 @@ SegmentReadTaskPool::SegmentReadTaskPool(
     , columns_to_read(columns_to_read_)
     , filter(filter_)
     , max_version(max_version_)
-    , expected_block_size(expected_block_size_)
     , read_mode(read_mode_)
     , tasks_wrapper(enable_read_thread_, std::move(tasks_))
     , after_segment_read(after_segment_read_)

@@ -126,7 +126,6 @@ public:
         const ColumnDefines & columns_to_read_,
         const PushDownFilterPtr & filter_,
         uint64_t max_version_,
-        size_t expected_block_size_,
         ReadMode read_mode_,
         SegmentReadTasks && tasks_,
         AfterSegmentRead after_segment_read_,
@@ -216,7 +215,6 @@ private:
     ColumnDefines columns_to_read;
     PushDownFilterPtr filter;
     const uint64_t max_version;
-    const size_t expected_block_size;
     const ReadMode read_mode;
     SegmentReadTasksWrapper tasks_wrapper;
     AfterSegmentRead after_segment_read;
