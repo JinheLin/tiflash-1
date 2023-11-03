@@ -244,10 +244,10 @@ public:
     RNLocalPageCacheGuard(
         const std::shared_ptr<RNLocalPageCache> & parent_,
         std::unique_lock<std::mutex> & lock,
-        const std::vector<UniversalPageId> keys_,
+        std::vector<UniversalPageId> keys_,
         const std::vector<size_t> sizes)
         : parent(parent_)
-        , keys(keys_)
+        , keys(std::move(keys_))
         , debug_id(global_id_seq.fetch_add(1, std::memory_order_seq_cst))
     {
         // Note: It is safe when a key occur multiple times in the `keys`,
