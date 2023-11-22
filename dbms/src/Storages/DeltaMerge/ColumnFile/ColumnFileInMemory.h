@@ -57,6 +57,9 @@ public:
         bytes = cache->block.bytes();
     }
 
+    explicit ColumnFileInMemory(UInt64 rows_)
+      : rows(rows_) {}
+
     Type getType() const override { return Type::INMEMORY_FILE; }
 
     size_t getRows() const override { return rows; }

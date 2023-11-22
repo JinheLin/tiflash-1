@@ -60,7 +60,8 @@ public:
     static RemotePb::RemotePhysicalTable serializePhysicalTable(
         const DisaggPhysicalTableReadSnapshotPtr & snap,
         const DisaggTaskId & task_id,
-        MemTrackerWrapper & mem_tracker_wrapper);
+        MemTrackerWrapper & mem_tracker_wrapper,
+        bool need_mem_data);
 
     static SegmentSnapshotPtr deserializeSegment(
         const DMContext & dm_context,
@@ -71,7 +72,8 @@ public:
 
     static google::protobuf::RepeatedPtrField<RemotePb::ColumnFileRemote> serializeColumnFileSet(
         const ColumnFileSetSnapshotPtr & snap,
-        MemTrackerWrapper & mem_tracker_wrapper);
+        MemTrackerWrapper & mem_tracker_wrapper,
+        bool need_mem_data);
     /// Note: This function always build a snapshot over nop data provider. In order to read from this snapshot,
     /// you must explicitly assign a proper data provider.
     static ColumnFileSetSnapshotPtr deserializeColumnFileSet(
@@ -86,9 +88,10 @@ private:
         UInt64 segment_epoch,
         const RowKeyRange & segment_range,
         const RowKeyRanges & read_ranges,
-        MemTrackerWrapper & mem_tracker_wrapper);
+        MemTrackerWrapper & mem_tracker_wrapper,
+        bool need_mem_data);
 
-    static RemotePb::ColumnFileRemote serializeCFInMemory(const ColumnFileInMemory & cf_in_mem);
+    static RemotePb::ColumnFileRemote serializeCFInMemory(const ColumnFileInMemory & cf_in_mem, bool need_mem_data);
     static ColumnFileInMemoryPtr deserializeCFInMemory(const RemotePb::ColumnFileInMemory & proto);
 
     static RemotePb::ColumnFileRemote serializeCFTiny(
