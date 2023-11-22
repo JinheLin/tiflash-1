@@ -61,13 +61,16 @@ private:
         , column_defines(column_defines_)
         , read_page_ids(std::move(read_page_ids))
         , packet_limit_size(packet_limit_size_)
+        , mem_tracker_wrapper(fetch_pages_mem_tracker.get())
         , log(Logger::get())
     {}
 
     /// Returns the next packet that could write to the response sink.
     disaggregated::PagesPacket nextPacket();
 
-    std::pair<DM::RemotePb::RemotePage, size_t> getPersistedRemotePage(UInt64 page_id);
+    std::tuple<DM::RemotePb::RemotePage, size_t> getPersistedRemotePage(UInt64 page_id);
+    std::tuple<disaggregated::PagesPacket, size_t> getMemTableSet();
+    std::tuple<size_t, size_t> sendMemTableSet(SyncPagePacketWriter * sync_writer);
 
 private:
     const DM::DisaggTaskId task_id;
@@ -75,7 +78,7 @@ private:
     DM::ColumnDefinesPtr column_defines;
     PageIdU64s read_page_ids;
     UInt64 packet_limit_size;
-
+    MemTrackerWrapper mem_tracker_wrapper;
     LoggerPtr log;
 };
 

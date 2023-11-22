@@ -440,6 +440,46 @@ struct WritePageTask
 };
 using WritePageTaskPtr = std::unique_ptr<WritePageTask>;
 
+void SegmentReadTask::handleMemTableSet(const disaggregated::PagesPacket & packet) const
+{
+    google::protobuf::RepeatedPtrField<RemotePb::ColumnFileRemote> cfs;
+    for (const auto & s : packet.chunks())
+    {
+        cfs.Add()->ParseFromString(s);
+        RUNTIME_CHECK(cfs.rbegin()->has_in_memory());
+    }
+    auto mem_table_snap
+        = Remote::Serializer::deserializeColumnFileSet(cfs, /*data_store*/ nullptr, segment->getRowKeyRange());
+    checkMemTableSet(*mem_table_snap);
+    read_snapshot->delta->setMemTableSetSnapshot(mem_table_snap);
+}
+
+void SegmentReadTask::checkMemTableSet(const ColumnFileSetSnapshot & mem_table_snap) const
+{
+    const auto & old_mem_table_snap = *(read_snapshot->delta->getMemTableSetSnapshot());
+
+    RUNTIME_CHECK_MSG(
+        mem_table_snap.getColumnFileCount() == old_mem_table_snap.getColumnFileCount(), 
+        "new_cf_count={}, old_cf_count={}",
+        mem_table_snap.getColumnFileCount(), old_mem_table_snap.getColumnFileCount());
+    
+    RUNTIME_CHECK_MSG(
+        mem_table_snap.getRows() >= old_mem_table_snap.getRows(), 
+        "new_rows={}, old_rows={}",
+        mem_table_snap.getRows(), old_mem_table_snap.getRows());
+}
+
+static void checkPageID(
+    UInt64 page_id,
+    std::vector<UInt64> & received_page_ids,
+    std::unordered_set<UInt64> & remaining_pages_to_fetch)
+{
+    RUNTIME_CHECK(remaining_pages_to_fetch.contains(page_id), remaining_pages_to_fetch, page_id);
+
+    received_page_ids.emplace_back(page_id);
+    remaining_pages_to_fetch.erase(page_id);
+}
+
 void SegmentReadTask::doFetchPages(const disaggregated::FetchDisaggPagesRequest & request)
 {
     // No page need to be fetched.
@@ -489,19 +529,25 @@ void SegmentReadTask::doFetchPages(const disaggregated::FetchDisaggPagesRequest 
     while (true)
     {
         Stopwatch sw_read_packet;
-        auto packet = std::make_shared<disaggregated::PagesPacket>();
-        if (!stream_resp->Read(packet.get()))
+        disaggregated::PagesPacket packet;
+        if (!stream_resp->Read(&packet))
             break;
-        if (packet->has_error())
-            throw Exception(ErrorCodes::FETCH_PAGES_ERROR, "{} (from {})", packet->error().msg(), *this);
+        if (packet.has_error())
+            throw Exception(ErrorCodes::FETCH_PAGES_ERROR, "{} (from {})", packet.error().msg(), *this);
 
         read_page_ns = sw_read_packet.elapsed();
         packet_count += 1;
-        MemTrackerWrapper packet_mem_tracker_wrapper(packet->SpaceUsedLong(), fetch_pages_mem_tracker.get());
+        MemTrackerWrapper packet_mem_tracker_wrapper(packet.SpaceUsedLong(), fetch_pages_mem_tracker.get());
+
+        if (packet.chunks_size() > 0)
+        {
+            handleMemTableSet(packet);
+            continue;
+        }
 
         std::vector<UInt64> received_page_ids;
-        received_page_ids.reserve(packet->pages_size());
-        for (const auto & page : packet->pages())
+        received_page_ids.reserve(packet.pages_size());
+        for (const auto & page : packet.pages())
         {
             Stopwatch sw;
             if (write_page_task == nullptr)
@@ -516,13 +562,7 @@ void SegmentReadTask::doFetchPages(const disaggregated::FetchDisaggPagesRequest 
                 remote_page.SpaceUsedLong(),
                 fetch_pages_mem_tracker.get());
 
-            RUNTIME_CHECK(
-                remaining_pages_to_fetch.contains(remote_page.page_id()),
-                remaining_pages_to_fetch,
-                remote_page.page_id());
-
-            received_page_ids.emplace_back(remote_page.page_id());
-            remaining_pages_to_fetch.erase(remote_page.page_id());
+            checkPageID(remote_page.page_id(), received_page_ids, remaining_pages_to_fetch);
 
             // Write page into LocalPageCache. Note that the page must be occupied.
             auto oid = Remote::PageOID{

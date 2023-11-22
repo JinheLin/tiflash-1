@@ -69,15 +69,6 @@ public:
         TableID table_id,
         const RemotePb::RemoteSegment & proto);
 
-private:
-    static RemotePb::RemoteSegment serializeSegment(
-        const SegmentSnapshotPtr & snap,
-        PageIdU64 segment_id,
-        UInt64 segment_epoch,
-        const RowKeyRange & segment_range,
-        const RowKeyRanges & read_ranges,
-        MemTrackerWrapper & mem_tracker_wrapper);
-
     static google::protobuf::RepeatedPtrField<RemotePb::ColumnFileRemote> serializeColumnFileSet(
         const ColumnFileSetSnapshotPtr & snap,
         MemTrackerWrapper & mem_tracker_wrapper);
@@ -87,6 +78,15 @@ private:
         const google::protobuf::RepeatedPtrField<RemotePb::ColumnFileRemote> & proto,
         const Remote::IDataStorePtr & data_store,
         const RowKeyRange & segment_range);
+
+private:
+    static RemotePb::RemoteSegment serializeSegment(
+        const SegmentSnapshotPtr & snap,
+        PageIdU64 segment_id,
+        UInt64 segment_epoch,
+        const RowKeyRange & segment_range,
+        const RowKeyRanges & read_ranges,
+        MemTrackerWrapper & mem_tracker_wrapper);
 
     static RemotePb::ColumnFileRemote serializeCFInMemory(const ColumnFileInMemory & cf_in_mem);
     static ColumnFileInMemoryPtr deserializeCFInMemory(const RemotePb::ColumnFileInMemory & proto);

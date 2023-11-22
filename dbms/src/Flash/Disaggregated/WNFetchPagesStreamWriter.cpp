@@ -23,6 +23,7 @@
 #include <Storages/DeltaMerge/Delta/DeltaValueSpace.h>
 #include <Storages/DeltaMerge/DeltaMergeDefines.h>
 #include <Storages/DeltaMerge/Remote/DisaggSnapshot.h>
+#include <Storages/DeltaMerge/Remote/Serializer.h>
 #include <Storages/DeltaMerge/Remote/WNDisaggSnapshotManager.h>
 #include <Storages/DeltaMerge/Segment.h>
 #include <Storages/Page/PageUtil.h>
@@ -30,7 +31,9 @@
 #include <kvproto/mpp.pb.h>
 #include <tipb/expression.pb.h>
 
+#include <ext/scope_guard.h>
 #include <memory>
+#include <tuple>
 
 namespace DB
 {
@@ -43,7 +46,7 @@ WNFetchPagesStreamWriterPtr WNFetchPagesStreamWriter::build(
         new WNFetchPagesStreamWriter(task.seg_task, task.column_defines, read_page_ids, packet_limit_size));
 }
 
-std::pair<DM::RemotePb::RemotePage, size_t> WNFetchPagesStreamWriter::getPersistedRemotePage(UInt64 page_id)
+std::tuple<DM::RemotePb::RemotePage, size_t> WNFetchPagesStreamWriter::getPersistedRemotePage(UInt64 page_id)
 {
     auto page = seg_task->read_snapshot->delta->getPersistedFileSetSnapshot()->getDataProvider()->readTinyData(page_id);
     DM::RemotePb::RemotePage remote_page;
@@ -57,10 +60,37 @@ std::pair<DM::RemotePb::RemotePage, size_t> WNFetchPagesStreamWriter::getPersist
     return {remote_page, page.data.size()};
 }
 
+std::tuple<disaggregated::PagesPacket, size_t> WNFetchPagesStreamWriter::getMemTableSet()
+{
+    const auto & mem_snap = seg_task->read_snapshot->delta->getMemTableSetSnapshot();
+    auto mem_size_before = mem_tracker_wrapper.size;
+    auto cfs = DM::Remote::Serializer::serializeColumnFileSet(mem_snap, mem_tracker_wrapper);
+    auto mem_size_delta = mem_tracker_wrapper.size > mem_size_before ? mem_tracker_wrapper.size - mem_size_before : 0;
+    disaggregated::PagesPacket packet;
+    for (const auto & cf : cfs)
+    {
+        packet.mutable_chunks()->Add(cf.SerializeAsString());
+    }
+    return std::make_tuple(std::move(packet), mem_size_delta);
+}
+
+std::tuple<size_t, size_t> WNFetchPagesStreamWriter::sendMemTableSet(SyncPagePacketWriter * sync_writer)
+{
+    auto t = getMemTableSet();
+    SCOPE_EXIT({ mem_tracker_wrapper.free(std::get<1>(t)); });
+
+    const auto & [packet, data_size] = t;
+    sync_writer->Write(packet);
+    return std::make_tuple(packet.chunks_size(), data_size);
+}
+
 void WNFetchPagesStreamWriter::pipeTo(SyncPagePacketWriter * sync_writer)
 {
+    Stopwatch send_mem_sw;
+    auto [mem_count, mem_size] = sendMemTableSet(sync_writer);
+    auto send_mem_ns = send_mem_sw.elapsed();
+
     disaggregated::PagesPacket packet;
-    MemTrackerWrapper packet_mem_tracker_wrapper(fetch_pages_mem_tracker.get());
     UInt64 total_pages_data_size = 0;
     UInt64 packet_count = 0;
     UInt64 pending_pages_data_size = 0;
@@ -73,7 +103,7 @@ void WNFetchPagesStreamWriter::pipeTo(SyncPagePacketWriter * sync_writer)
         total_pages_data_size += page_size;
         pending_pages_data_size += page_size;
         packet.mutable_pages()->Add(remote_page.SerializeAsString());
-        packet_mem_tracker_wrapper.alloc(page_size);
+        mem_tracker_wrapper.alloc(page_size);
         read_page_ns += sw_packet.elapsedFromLastTime();
 
         if (pending_pages_data_size > packet_limit_size)
@@ -83,7 +113,7 @@ void WNFetchPagesStreamWriter::pipeTo(SyncPagePacketWriter * sync_writer)
             send_page_ns += sw_packet.elapsedFromLastTime();
             pending_pages_data_size = 0;
             packet.clear_pages(); // Only set pages field before.
-            packet_mem_tracker_wrapper.freeAll();
+            mem_tracker_wrapper.freeAll();
         }
     }
 
@@ -95,16 +125,14 @@ void WNFetchPagesStreamWriter::pipeTo(SyncPagePacketWriter * sync_writer)
         send_page_ns += sw.elapsedFromLastTime();
     }
 
-    // TODO: Currently the memtable data is responded in the Establish stage, instead of in the FetchPages stage.
-    //       We could improve it to respond in the FetchPages stage, so that the parallel FetchPages could start
-    //       as soon as possible.
-
     LOG_DEBUG(
         log,
-        "Send FetchPagesStream, pages={} pages_size={} blocks={} packets={} read_page_ms={} send_page_ms={}",
+        "mem_count={} mem_size={} send_mem_ms={} pages={} pages_size={} packets={} read_page_ms={} send_page_ms={}",
+        mem_count,
+        mem_size,
+        send_mem_ns / 1000000,
         read_page_ids.size(),
         total_pages_data_size,
-        packet.chunks_size(),
         packet_count,
         read_page_ns / 1000000,
         send_page_ns / 1000000);
