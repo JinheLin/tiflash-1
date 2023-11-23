@@ -440,7 +440,7 @@ struct WritePageTask
 };
 using WritePageTaskPtr = std::unique_ptr<WritePageTask>;
 
-void SegmentReadTask::handleMemTableSet(const disaggregated::PagesPacket & packet) const
+void SegmentReadTask::handleMemTableSet(const disaggregated::PagesPacket & packet)
 {
     google::protobuf::RepeatedPtrField<RemotePb::ColumnFileRemote> cfs;
     for (const auto & s : packet.chunks())
@@ -448,25 +448,60 @@ void SegmentReadTask::handleMemTableSet(const disaggregated::PagesPacket & packe
         cfs.Add()->ParseFromString(s);
         RUNTIME_CHECK(cfs.rbegin()->has_in_memory());
     }
+    // `data_store` is unused in ColumnFileInMemory.
     auto mem_table_snap
         = Remote::Serializer::deserializeColumnFileSet(cfs, /*data_store*/ nullptr, segment->getRowKeyRange());
-    checkMemTableSet(*mem_table_snap);
+    checkMemTableSet(mem_table_snap);
     read_snapshot->delta->setMemTableSetSnapshot(mem_table_snap);
 }
 
-void SegmentReadTask::checkMemTableSet(const ColumnFileSetSnapshot & mem_table_snap) const
+void SegmentReadTask::checkMemTableSet(const ColumnFileSetSnapshotPtr & mem_table_snap) const
 {
-    const auto & old_mem_table_snap = *(read_snapshot->delta->getMemTableSetSnapshot());
+    const auto & old_mem_table_snap = read_snapshot->delta->getMemTableSetSnapshot();
 
     RUNTIME_CHECK_MSG(
-        mem_table_snap.getColumnFileCount() == old_mem_table_snap.getColumnFileCount(), 
-        "new_cf_count={}, old_cf_count={}",
-        mem_table_snap.getColumnFileCount(), old_mem_table_snap.getColumnFileCount());
-    
-    RUNTIME_CHECK_MSG(
-        mem_table_snap.getRows() >= old_mem_table_snap.getRows(), 
-        "new_rows={}, old_rows={}",
-        mem_table_snap.getRows(), old_mem_table_snap.getRows());
+        mem_table_snap->getColumnFileCount() == old_mem_table_snap->getColumnFileCount(),
+        "log_id={}, new_cf_count={}, old_cf_count={}",
+        read_snapshot->log->identifier(),
+        mem_table_snap->getColumnFileCount(),
+        old_mem_table_snap->getColumnFileCount());
+
+    const auto & column_files = mem_table_snap->getColumnFiles();
+    const auto & old_column_files = old_mem_table_snap->getColumnFiles();
+
+    // Only the last ColumnFileInMemory is appendable.
+    if (column_files.size() > 1)
+    {
+        for (size_t i = 0; i < column_files.size() - 1; ++i)
+        {
+            const auto & cf = column_files[i];
+            const auto & old_cf = old_column_files[i];
+            RUNTIME_CHECK_MSG(
+                cf->getRows() == old_cf->getRows(),
+                "log_id={}, new_rows={}, old_rows={}, cf_count={}, cf_index={}",
+                read_snapshot->log->identifier(),
+                cf->getRows(),
+                old_cf->getRows(),
+                column_files.size(),
+                i);
+        }
+    }
+    if (!column_files.empty())
+    {
+        RUNTIME_CHECK_MSG(
+            column_files.back()->getRows() >= old_column_files.back()->getRows(),
+            "log_id={}, new_rows={}, old_rows={}, cf_count={}, cf_index={}",
+            read_snapshot->log->identifier(),
+            column_files.back()->getRows(),
+            old_column_files.back()->getRows(),
+            column_files.size(),
+            column_files.size() - 1);
+    }
+}
+
+bool SegmentReadTask::shouldFetchMemTableSet() const
+{
+    return read_snapshot->delta->getMemTableSetSnapshot()->getRows() > 0;
 }
 
 static void checkPageID(
@@ -482,8 +517,8 @@ static void checkPageID(
 
 void SegmentReadTask::doFetchPages(const disaggregated::FetchDisaggPagesRequest & request)
 {
-    // No page need to be fetched.
-    if (request.page_ids_size() == 0)
+    // No page and memtable need to be fetched.
+    if (request.page_ids_size() == 0 && !shouldFetchMemTableSet())
         return;
 
     UInt64 read_page_ns = 0;
