@@ -40,10 +40,10 @@ namespace DB
 WNFetchPagesStreamWriterPtr WNFetchPagesStreamWriter::build(
     const DM::Remote::SegmentPagesFetchTask & task,
     const PageIdU64s & read_page_ids,
-    UInt64 packet_limit_size)
+    const Settings & settings)
 {
     return std::unique_ptr<WNFetchPagesStreamWriter>(
-        new WNFetchPagesStreamWriter(task.seg_task, task.column_defines, read_page_ids, packet_limit_size));
+        new WNFetchPagesStreamWriter(task.seg_task, task.column_defines, read_page_ids, settings));
 }
 
 std::tuple<DM::RemotePb::RemotePage, size_t> WNFetchPagesStreamWriter::getPersistedRemotePage(UInt64 page_id)
@@ -64,7 +64,7 @@ std::tuple<disaggregated::PagesPacket, size_t> WNFetchPagesStreamWriter::getMemT
 {
     const auto & mem_snap = seg_task->read_snapshot->delta->getMemTableSetSnapshot();
     auto mem_size_before = mem_tracker_wrapper.size;
-    auto cfs = DM::Remote::Serializer::serializeColumnFileSet(mem_snap, mem_tracker_wrapper);
+    auto cfs = DM::Remote::Serializer::serializeColumnFileSet(mem_snap, mem_tracker_wrapper, true);
     auto mem_size_delta = mem_tracker_wrapper.size > mem_size_before ? mem_tracker_wrapper.size - mem_size_before : 0;
     disaggregated::PagesPacket packet;
     for (const auto & cf : cfs)
@@ -74,8 +74,12 @@ std::tuple<disaggregated::PagesPacket, size_t> WNFetchPagesStreamWriter::getMemT
     return std::make_tuple(std::move(packet), mem_size_delta);
 }
 
-std::tuple<size_t, size_t> WNFetchPagesStreamWriter::sendMemTableSet(SyncPagePacketWriter * sync_writer)
+std::tuple<Int64, Int64> WNFetchPagesStreamWriter::sendMemTableSet(SyncPagePacketWriter * sync_writer)
 {
+    if (!enable_delta_cache_streaming)
+    {
+        return std::make_tuple(-1, -1);
+    }
     auto t = getMemTableSet();
     SCOPE_EXIT({ mem_tracker_wrapper.free(std::get<1>(t)); });
 
