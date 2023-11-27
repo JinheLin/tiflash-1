@@ -261,11 +261,13 @@ RemotePb::ColumnFileRemote Serializer::serializeCFInMemory(const ColumnFileInMem
 {
     RemotePb::ColumnFileRemote ret;
     auto * remote_in_memory = ret.mutable_in_memory();
-   
+
     std::unique_lock lock(cf_in_mem.cache->mutex);
     const auto block_rows = cf_in_mem.cache->block.rows();
     remote_in_memory->set_rows(block_rows);
-    if (need_mem_data)
+    // If `block_rows` is 0, just return its schema so that we can avoid fetching pages if delta is really empty.
+    // TODO: We can avoid repeatedly serializing the schema for each columnfile if they have the same schema.
+    if (need_mem_data || block_rows == 0)
     {
         // Still hold the lock
         for (const auto & col : cf_in_mem.cache->block)

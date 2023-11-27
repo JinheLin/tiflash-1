@@ -130,7 +130,6 @@ public:
     void doFetchPages(const disaggregated::FetchDisaggPagesRequest & request);
     void handleMemTableSet(const disaggregated::PagesPacket & packet);
     void checkMemTableSet(const ColumnFileSetSnapshotPtr & mem_table_snap) const;
-    bool shouldFetchMemTableSet() const;
 
     void initColumnFileDataProvider(const Remote::RNLocalPageCacheGuardPtr & pages_guard);
 
@@ -150,6 +149,9 @@ public:
         size_t expected_block_size);
 
     BlockInputStreamPtr input_stream;
+
+    bool need_fetch_cf_tiny = false;
+    bool need_fetch_cf_in_mem = false;
 };
 
 // Used in SegmentReadTaskScheduler, SegmentReadTaskPool.

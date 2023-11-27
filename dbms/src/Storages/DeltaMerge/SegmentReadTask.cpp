@@ -26,6 +26,8 @@
 #include <Storages/KVStore/TMTContext.h>
 #include <Storages/Page/V3/Universal/UniversalWriteBatchImpl.h>
 
+#include "Common/Exception.h"
+
 using namespace std::chrono_literals;
 
 namespace CurrentMetrics
@@ -130,11 +132,39 @@ SegmentReadTask::SegmentReadTask(
         .remote_page_ids = std::move(remote_page_ids),
         .remote_page_sizes = std::move(remote_page_sizes),
     });
+    need_fetch_cf_tiny = !extra_remote_info.remote_page_ids.empty();
+
+    const auto & mem_table_snap = read_snapshot->delta->getMemTableSetSnapshot();
+    // MemTableSet is not returned.
+    if (auto bytes = mem_table_snap->getBytes(); bytes == 0)
+    {
+        // MemTableSet is actually empty.
+        if (auto rows = mem_table_snap->getRows(); rows == 0)
+        {
+            RUNTIME_CHECK_MSG(
+                mem_table_snap->getColumnFileCount() == 1,
+                "id={} column_file_count={}",
+                read_snapshot->log->identifier(),
+                mem_table_snap->getColumnFileCount());
+            auto * cf_in_mem = mem_table_snap->getColumnFiles().front()->tryToInMemoryFile();
+            RUNTIME_CHECK_MSG(cf_in_mem != nullptr, "id={} tryToInMemoryFile failed", read_snapshot->log->identifier());
+            RUNTIME_CHECK_MSG(
+                cf_in_mem->getCache() != nullptr,
+                "id={} Cache of ColumnFileInMemory is null",
+                read_snapshot->log->identifier());
+        }
+        else
+        {
+            need_fetch_cf_in_mem = true;
+        }
+    }
 
     LOG_DEBUG(
         read_snapshot->log,
-        "memtable_cfs_count={} persisted_cfs_count={} remote_page_ids={} delta_index={} store_address={}",
+        "memtable_cfs_count={} need_fetch_memtableset={} persisted_cfs_count={} remote_page_ids={} delta_index={} "
+        "store_address={}",
         read_snapshot->delta->getMemTableSetSnapshot()->getColumnFileCount(),
+        need_fetch_memtableset,
         cfs.size(),
         extra_remote_info->remote_page_ids,
         read_snapshot->delta->getSharedDeltaIndex()->toString(),
@@ -304,7 +334,7 @@ void SegmentReadTask::doInitInputStream(
 
 void SegmentReadTask::fetchPages()
 {
-    if (!extra_remote_info.has_value() || extra_remote_info->remote_page_ids.empty())
+    if (!need_fetch_memtableset && !need_fetch_cf_tiny)
     {
         return;
     }
@@ -499,11 +529,6 @@ void SegmentReadTask::checkMemTableSet(const ColumnFileSetSnapshotPtr & mem_tabl
     }
 }
 
-bool SegmentReadTask::shouldFetchMemTableSet() const
-{
-    return read_snapshot->delta->getMemTableSetSnapshot()->getRows() > 0;
-}
-
 static void checkPageID(
     UInt64 page_id,
     std::vector<UInt64> & received_page_ids,
@@ -518,7 +543,7 @@ static void checkPageID(
 void SegmentReadTask::doFetchPages(const disaggregated::FetchDisaggPagesRequest & request)
 {
     // No page and memtable need to be fetched.
-    if (request.page_ids_size() == 0 && !shouldFetchMemTableSet())
+    if (request.page_ids_size() == 0 && !need_fetch_cf_in_mem)
         return;
 
     UInt64 read_page_ns = 0;
