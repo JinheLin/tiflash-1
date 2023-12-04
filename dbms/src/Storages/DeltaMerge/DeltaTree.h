@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <Common/FailPoint.h>
 #include <Common/TargetSpecific.h>
 #include <Core/Types.h>
 #include <IO/WriteHelpers.h>
@@ -24,9 +25,17 @@
 #include <memory>
 #include <queue>
 
-namespace DB
+namespace DB::FailPoints
 {
-namespace DM
+extern const char delta_tree_create_node_fail[];
+}
+
+namespace DB::ErrorCodes
+{
+extern const int FAIL_POINT_ERROR;
+};
+
+namespace DB::DM
 {
 struct DTMutation;
 template <size_t M, size_t F, size_t S>
@@ -901,6 +910,9 @@ private:
     template <typename T>
     T * createNode()
     {
+        fiu_do_on(FailPoints::delta_tree_create_node_fail, {
+            throw Exception("Failpoint delta_tree_create_node_fail is triggered.", ErrorCodes::FAIL_POINT_ERROR);
+        });
         T * n = reinterpret_cast<T *>(allocator->alloc(sizeof(T)));
         new (n) T();
 
@@ -915,7 +927,7 @@ private:
         constexpr bool is_leaf = std::is_same<Leaf, T>::value;
         if constexpr (!is_leaf)
         {
-            InternPtr intern = static_cast<InternPtr>(node);
+            auto intern = static_cast<InternPtr>(node);
             if (intern->count)
             {
                 if (isLeaf(intern->children[0]))
@@ -937,6 +949,19 @@ private:
 
         root = createNode<Leaf>();
         left_leaf = right_leaf = as(Leaf, root);
+    }
+
+    void destory()
+    {
+        if (root)
+        {
+            if (isLeaf(root))
+                freeTree<Leaf>(static_cast<LeafPtr>(root));
+            else
+                freeTree<Intern>(static_cast<InternPtr>(root));
+        }
+
+        delete allocator;
     }
 
 public:
@@ -974,18 +999,7 @@ public:
         insert_value_space.swap(other.insert_value_space);
     }
 
-    ~DeltaTree()
-    {
-        if (root)
-        {
-            if (isLeaf(root))
-                freeTree<Leaf>(static_cast<LeafPtr>(root));
-            else
-                freeTree<Intern>(static_cast<InternPtr>(root));
-        }
-
-        delete allocator;
-    }
+    ~DeltaTree() { destory(); }
 
     void checkAll() const
     {
@@ -1495,5 +1509,4 @@ typename DT_CLASS::InternPtr DT_CLASS::afterNodeUpdated(T * node)
 #undef DT_TEMPLATE
 #undef DT_CLASS
 
-} // namespace DM
-} // namespace DB
+} // namespace DB::DM
