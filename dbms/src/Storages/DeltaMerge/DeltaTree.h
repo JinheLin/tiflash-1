@@ -19,7 +19,7 @@
 #include <Core/Types.h>
 #include <IO/WriteHelpers.h>
 #include <Storages/DeltaMerge/Tuple.h>
-
+#include <ext/scope_guard.h>
 #include <algorithm>
 #include <cstddef>
 #include <memory>
@@ -826,7 +826,7 @@ private:
     size_t num_deletes = 0;
     size_t num_entries = 0;
 
-    Allocator * allocator = nullptr;
+    std::unique_ptr<Allocator> allocator;
     size_t bytes = 0;
 
 public:
@@ -943,7 +943,7 @@ private:
 
     void init(const ValueSpacePtr & insert_value_space_)
     {
-        allocator = new Allocator();
+        allocator = std::make_unique<Allocator>();
 
         insert_value_space = insert_value_space_;
 
@@ -951,17 +951,15 @@ private:
         left_leaf = right_leaf = as(Leaf, root);
     }
 
-    void destory()
+    void destory(NodePtr r)
     {
-        if (root)
+        if (r)
         {
-            if (isLeaf(root))
-                freeTree<Leaf>(static_cast<LeafPtr>(root));
+            if (isLeaf(r))
+                freeTree<Leaf>(static_cast<LeafPtr>(r));
             else
-                freeTree<Intern>(static_cast<InternPtr>(root));
+                freeTree<Intern>(static_cast<InternPtr>(r));
         }
-
-        delete allocator;
     }
 
 public:
@@ -999,7 +997,7 @@ public:
         insert_value_space.swap(other.insert_value_space);
     }
 
-    ~DeltaTree() { destory(); }
+    ~DeltaTree() { destory(root); }
 
     void checkAll() const
     {
@@ -1057,9 +1055,11 @@ DT_CLASS::DeltaTree(const DT_CLASS::Self & o)
     , num_inserts(o.num_inserts)
     , num_deletes(o.num_deletes)
     , num_entries(o.num_entries)
-    , allocator(new Allocator())
+    , allocator(std::make_unique<Allocator>())
 {
     NodePtr my_root;
+    // If exception is thrown below, my_root will be destroy to avoid memory leak.
+    SCOPE_EXIT({destory(my_root);});
     if (isLeaf(o.root))
         my_root = new (createNode<Leaf>()) Leaf(*as(Leaf, o.root));
     else
@@ -1117,7 +1117,7 @@ DT_CLASS::DeltaTree(const DT_CLASS::Self & o)
         }
     }
 
-    this->root = my_root;
+    std::swap(this->root, my_root);
     this->left_leaf = first_leaf;
     this->right_leaf = last_leaf;
 }

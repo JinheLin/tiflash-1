@@ -17,12 +17,9 @@
 #include <Storages/DeltaMerge/Tuple.h>
 #include <gtest/gtest.h>
 
-namespace DB
+namespace DB::DM::tests
 {
-namespace DM
-{
-namespace tests
-{
+
 #define print(M) std::cout << "" #M ": " << M << std::endl
 
 class FakeValueSpace;
@@ -62,6 +59,16 @@ using FakeValueSpacePtr = std::shared_ptr<FakeValueSpace>;
 class DeltaTree_test : public ::testing::Test
 {
 protected:
+    void SetUp() override
+    {
+        ASSERT_EQ(tree.getBytes(), sizeof(FakeDeltaTree::Leaf));
+    }
+
+    void TearDown() override
+    {
+        std::cout << fmt::format("TearDown: tree={}\n", tree.getBytes());
+    }
+
     FakeDeltaTree tree;
 };
 
@@ -317,6 +324,4 @@ TEST_F(DeltaTree_test, InsertSkipDelete)
     checkCopy(tree);
 }
 
-} // namespace tests
-} // namespace DM
-} // namespace DB
+} // namespace DB::DM::tests
