@@ -905,14 +905,18 @@ private:
         allocator->free(reinterpret_cast<char *>(node), sizeof(T));
 
         bytes -= sizeof(T);
+        std::cout << "freeNode: " << sizeof(T) << std::endl;
     }
 
     template <typename T>
     T * createNode()
     {
         fiu_do_on(FailPoints::delta_tree_create_node_fail, {
-            throw Exception("Failpoint delta_tree_create_node_fail is triggered.", ErrorCodes::FAIL_POINT_ERROR);
+            static int num_call = 0;
+            if (num_call++ % 10 == 5)
+                throw Exception("Failpoint delta_tree_create_node_fail is triggered", ErrorCodes::FAIL_POINT_ERROR);
         });
+        std::cout << "createNode: " << sizeof(T) << std::endl;
         T * n = reinterpret_cast<T *>(allocator->alloc(sizeof(T)));
         new (n) T();
 
