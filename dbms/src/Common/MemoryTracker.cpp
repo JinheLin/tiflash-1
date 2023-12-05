@@ -28,6 +28,7 @@ namespace CurrentMetrics
 extern const Metric MemoryTrackingQueryStorageTask;
 extern const Metric MemoryTrackingFetchPages;
 extern const Metric MemoryTrackingSharedColumnData;
+extern const Metric MemoryTrackingDeltaCFInMem;
 } // namespace CurrentMetrics
 
 std::atomic<Int64> real_rss{0}, proc_num_threads{1}, baseline_of_query_mem_tracker{0};
@@ -292,6 +293,8 @@ thread_local MemoryTracker * current_memory_tracker = nullptr;
 #endif
 
 std::shared_ptr<MemoryTracker> root_of_non_query_mem_trackers = MemoryTracker::createGlobalRoot();
+MemoryTrackerPtr storage_delta_mem_tracker;
+
 std::shared_ptr<MemoryTracker> root_of_query_mem_trackers = MemoryTracker::createGlobalRoot();
 
 std::shared_ptr<MemoryTracker> sub_root_of_query_storage_task_mem_trackers;
@@ -323,6 +326,10 @@ void initStorageMemoryTracker(Int64 limit, Int64 larger_than_limit)
     shared_column_data_mem_tracker
         = MemoryTracker::create(0, sub_root_of_query_storage_task_mem_trackers.get(), log_in_destructor);
     shared_column_data_mem_tracker->setAmountMetric(CurrentMetrics::MemoryTrackingSharedColumnData);
+
+    RUNTIME_CHECK(storage_delta_mem_tracker == nullptr);
+    storage_delta_mem_tracker = MemoryTracker::create(0, root_of_non_query_mem_trackers.get());
+    storage_delta_mem_tracker->setAmountMetric(CurrentMetrics::MemoryTrackingDeltaCFInMem);
 }
 
 namespace CurrentMemoryTracker

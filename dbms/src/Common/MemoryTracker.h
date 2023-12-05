@@ -162,6 +162,8 @@ extern thread_local MemoryTracker * current_memory_tracker;
 #endif
 
 extern std::shared_ptr<MemoryTracker> root_of_non_query_mem_trackers;
+extern MemoryTrackerPtr storage_delta_mem_tracker;
+
 extern std::shared_ptr<MemoryTracker> root_of_query_mem_trackers;
 
 // Initialize in `initStorageMemoryTracker`.
