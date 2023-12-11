@@ -14,6 +14,8 @@
 #include <Storages/DeltaMerge/ReadThread/SegmentReadTaskScheduler.h>
 #include <Storages/DeltaMerge/ReadThread/SegmentReader.h>
 #include <Storages/DeltaMerge/Segment.h>
+#include "Common/Stopwatch.h"
+#include "Storages/DeltaMerge/SegmentReadTaskPool.h"
 
 namespace DB::DM
 {
@@ -56,28 +58,20 @@ void SegmentReadTaskScheduler::add(const SegmentReadTaskPoolPtr & pool, const Lo
         sw_do_add.elapsed() / 1000.0);
 }
 
-std::pair<MergedTaskPtr, bool> SegmentReadTaskScheduler::scheduleMergedTask()
+MergedTaskPtr SegmentReadTaskScheduler::scheduleMergedTask(SegmentReadTaskPoolPtr & pool)
 {
-    auto pool = scheduleSegmentReadTaskPoolUnlock();
-    if (pool == nullptr)
-    {
-        // No SegmentReadTaskPool to schedule. Maybe no read request or
-        // block queue of each SegmentReadTaskPool reaching the limit.
-        return {nullptr, false};
-    }
-
     // If pool->valid(), read blocks.
     // If !pool->valid(), read path will clean it.
     auto merged_task = merged_task_pool.pop(pool->pool_id);
     if (merged_task != nullptr)
     {
         GET_METRIC(tiflash_storage_read_thread_counter, type_sche_from_cache).Increment();
-        return {merged_task, true};
+        return merged_task;
     }
 
     if (!pool->valid())
     {
-        return {nullptr, true};
+        return nullptr;
     }
 
     auto segment = scheduleSegmentUnlock(pool);
@@ -85,13 +79,13 @@ std::pair<MergedTaskPtr, bool> SegmentReadTaskScheduler::scheduleMergedTask()
     {
         // The number of active segments reaches the limit.
         GET_METRIC(tiflash_storage_read_thread_counter, type_sche_no_segment).Increment();
-        return {nullptr, true};
+        return nullptr;
     }
     auto pools = getPoolsUnlock(segment->second);
     if (pools.empty())
     {
         // Maybe SegmentReadTaskPools are expired because of upper threads finish the request.
-        return {nullptr, true};
+        return nullptr;
     }
 
     std::vector<MergedUnit> units;
@@ -102,7 +96,7 @@ std::pair<MergedTaskPtr, bool> SegmentReadTaskScheduler::scheduleMergedTask()
     }
     GET_METRIC(tiflash_storage_read_thread_counter, type_sche_new_task).Increment();
 
-    return {std::make_shared<MergedTask>(segment->first, std::move(units)), true};
+    return std::make_shared<MergedTask>(segment->first, std::move(units));
 }
 
 SegmentReadTaskPools SegmentReadTaskScheduler::getPoolsUnlock(const std::vector<uint64_t> & pool_ids)
@@ -157,15 +151,19 @@ bool SegmentReadTaskScheduler::needScheduleToRead(const SegmentReadTaskPoolPtr &
     return false;
 }
 
+bool SegmentReadTaskScheduler::needSchedule(const SegmentReadTaskPoolPtr & pool)
+{
+    // If !pool->valid(), schedule it for clean MergedTaskPool.
+    return pool != nullptr && (needScheduleToRead(pool) || !pool->valid());
+}
+
 SegmentReadTaskPoolPtr SegmentReadTaskScheduler::scheduleSegmentReadTaskPoolUnlock()
 {
     int64_t pool_count
         = read_pools.size(); // All read task pool need to be scheduled, including invalid read task pool.
     for (int64_t i = 0; i < pool_count; i++)
     {
-        auto pool = read_pools.next();
-        // If !pool->valid(), schedule it for clean MergedTaskPool.
-        if (pool != nullptr && (needScheduleToRead(pool) || !pool->valid()))
+        if (auto pool = read_pools.next(); needSchedule(pool))
         {
             return pool;
         }
@@ -211,6 +209,32 @@ void SegmentReadTaskScheduler::setStop()
 bool SegmentReadTaskScheduler::isStop() const
 {
     return stop.load(std::memory_order_relaxed);
+}
+
+bool SegmentReadTaskScheduler::scheduleOneRound()
+{
+    Stopwatch sw_total;
+    std::lock_guard lock(mtx);    
+    Stopwatch sw_do;
+    UInt64 scheduled_count = 0;
+    for (auto itr = weak_pools.begin(); itr != weak_pools.end();)
+    {
+        auto pool = itr->lock();
+        if (pool == nullptr)
+        {
+            itr = weak_pools.erase(itr);
+            continue;
+        }
+        ++itr;
+        if (!needSchedule(pool))
+        {
+            continue;
+        }
+
+
+        // handle pool
+    }
+    return false;
 }
 
 bool SegmentReadTaskScheduler::schedule()

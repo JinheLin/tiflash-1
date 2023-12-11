@@ -52,11 +52,13 @@ private:
     void setStop();
     bool isStop() const;
     bool needScheduleToRead(const SegmentReadTaskPoolPtr & pool);
+    bool needSchedule(const SegmentReadTaskPoolPtr & pool);
 
+    bool scheduleOneRound() LOCKS_EXCLUDED(mtx);
     bool schedule() LOCKS_EXCLUDED(mtx);
     void schedLoop() LOCKS_EXCLUDED(mtx);
     // Choose segment to read, returns <MergedTaskPtr, run_next_schedule_immediately>.
-    std::pair<MergedTaskPtr, bool> scheduleMergedTask() EXCLUSIVE_LOCKS_REQUIRED(mtx);
+    std::pair<MergedTaskPtr, bool> scheduleMergedTask(SegmentReadTaskPoolPtr & pool) EXCLUSIVE_LOCKS_REQUIRED(mtx);
     SegmentReadTaskPoolPtr scheduleSegmentReadTaskPoolUnlock() EXCLUSIVE_LOCKS_REQUIRED(mtx);
     // Returns <seg_id, pool_ids>.
     std::optional<std::pair<GlobalSegmentID, std::vector<UInt64>>> scheduleSegmentUnlock(
@@ -68,6 +70,7 @@ private:
 
     std::mutex mtx;
     SegmentReadTaskPoolList read_pools GUARDED_BY(mtx);
+    std::list<SegmentReadTaskPoolPtr::weak_type> weak_pools GUARDED_BY(mtx);
     // GlobalSegmentID -> pool_ids
     MergingSegments merging_segments GUARDED_BY(mtx);
 
