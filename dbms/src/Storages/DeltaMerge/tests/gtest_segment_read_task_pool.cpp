@@ -18,14 +18,15 @@
 #include <Storages/DeltaMerge/tests/gtest_segment_test_basic.h>
 #include <Storages/KVStore/KVStore.h>
 #include <TestUtils/TiFlashTestBasic.h>
+#include <Storages/DeltaMerge/ReadThread/SegmentReadTaskScheduler.h>
 
 #include <random>
 namespace DB::DM::tests
 {
-class SegmentReadTasksWrapperTest : public SegmentTestBasic
+class SegmentReadTasksPoolTest : public SegmentTestBasic
 {
 protected:
-    SegmentPtr createSegment(PageIdU64 seg_id)
+    static SegmentPtr createSegment(PageIdU64 seg_id)
     {
         return std::make_shared<Segment>(Logger::get(), 0, RowKeyRange{}, seg_id, seg_id + 1, nullptr, nullptr);
     }
@@ -57,10 +58,28 @@ protected:
         };
     }
 
+    SegmentReadTaskPoolPtr createSegmentReadTaskPool(const std::vector<PageIdU64> & seg_ids)
+    {
+        auto dm_context = createDMContext();
+        return std::make_shared<SegmentReadTaskPool>(
+            /*extra_table_id_index_*/ dm_context->physical_table_id,
+            /*columns_to_read_*/ColumnDefines{},
+            /*filter_*/nullptr,
+            /*max_version_*/0,
+            /*expected_block_size_*/DEFAULT_BLOCK_SIZE,
+            /*read_mode_*/ ReadMode::Bitmap,
+            createSegmentReadTasks(seg_ids),
+            /*after_segment_read_*/AfterSegmentRead{},
+            /*tracing_id_*/String{},
+            /*enable_read_thread_*/true,
+            /*num_streams_*/ 1,
+            /*res_group_name_*/String{});
+    }
+
     inline static const std::vector<PageIdU64> test_seg_ids{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
 };
 
-TEST_F(SegmentReadTasksWrapperTest, Unordered)
+TEST_F(SegmentReadTasksPoolTest, UnorderedWrapper)
 {
     SegmentReadTasksWrapper tasks_wrapper(true, createSegmentReadTasks(test_seg_ids));
 
@@ -95,7 +114,7 @@ TEST_F(SegmentReadTasksWrapperTest, Unordered)
     ASSERT_TRUE(tasks_wrapper.empty());
 }
 
-TEST_F(SegmentReadTasksWrapperTest, Ordered)
+TEST_F(SegmentReadTasksPoolTest, OrderedWrapper)
 {
     SegmentReadTasksWrapper tasks_wrapper(false, createSegmentReadTasks(test_seg_ids));
 
@@ -119,6 +138,25 @@ TEST_F(SegmentReadTasksWrapperTest, Ordered)
     }
     ASSERT_TRUE(tasks_wrapper.empty());
     ASSERT_EQ(tasks_wrapper.nextTask(), nullptr);
+}
+
+TEST_F(SegmentReadTasksPoolTest, Scheduler)
+{
+    SegmentReadTaskScheduler scheduler{false};
+
+    {
+        auto pool = createSegmentReadTaskPool(test_seg_ids);
+        scheduler.add(pool, Logger::get("SegmentReadTasksPoolTest::scheduler"));
+
+        auto active_segment_limits = pool->getFreeActiveSegments();
+        ASSERT_GT(active_segment_limits, 0);
+        std::vector<MergedTaskPtr> merged_tasks(active_segment_limits);
+        for (int i = 0; i < active_segment_limits; i++)
+        {
+            auto merged_task = scheduler.scheduleMergedTask(pool);
+        }
+    }
+
 }
 
 } // namespace DB::DM::tests

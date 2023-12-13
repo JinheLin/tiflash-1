@@ -17,17 +17,23 @@
 
 namespace DB::DM
 {
-SegmentReadTaskScheduler::SegmentReadTaskScheduler()
+SegmentReadTaskScheduler::SegmentReadTaskScheduler(bool run_sched_thread)
     : stop(false)
     , log(Logger::get())
 {
-    sched_thread = std::thread(&SegmentReadTaskScheduler::schedLoop, this);
+    if (likely(run_sched_thread))
+    {
+        sched_thread = std::thread(&SegmentReadTaskScheduler::schedLoop, this);
+    }
 }
 
 SegmentReadTaskScheduler::~SegmentReadTaskScheduler()
 {
     setStop();
-    sched_thread.join();
+    if (sched_thread.joinable())
+    {
+        sched_thread.join();
+    }
 }
 
 void SegmentReadTaskScheduler::add(const SegmentReadTaskPoolPtr & pool, const LoggerPtr & req_log)

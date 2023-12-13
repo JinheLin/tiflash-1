@@ -44,8 +44,12 @@ public:
 
     void pushMergedTask(const MergedTaskPtr & p) { merged_task_pool.push(p); }
 
+#ifndef DBMS_PUBLIC_GTEST
 private:
-    SegmentReadTaskScheduler();
+#else
+public:
+#endif
+    explicit SegmentReadTaskScheduler(bool run_sched_thread = true);
 
     void setStop();
     bool isStop() const;
