@@ -25,4 +25,6 @@ namespace DB::DM
 {
 // `getNumaNodes` returns cpus of each Numa node.
 std::vector<std::vector<int>> getNumaNodes(const LoggerPtr & log);
+// Bind the calling thread to `cpus`.
+void setCPUAffinity(const std::vector<int> & cpus, const LoggerPtr & log);
 } // namespace DB::DM

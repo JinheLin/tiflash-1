@@ -580,6 +580,11 @@ static_assert(RAFT_REGION_BIG_WRITE_THRES * 4 < RAFT_REGION_BIG_WRITE_MAX, "Inva
       F(type_sche_from_cache, {"type", "sche_from_cache"}),                                                                         \
       F(type_sche_new_task, {"type", "sche_new_task"}),                                                                             \
       F(type_ru_exhausted, {"type", "ru_exhausted"}),                                                                               \
+      F(type_pop_queue, {"type", "pop_queue"}),                                                                                     \
+      F(type_pop_queue_empty, {"type", "pop_queue_empty"}),                                                                         \
+      F(type_push_queue, {"type", "push_queue"}),                                                                                   \
+      F(type_push_queue_empty, {"type", "push_queue_empty"}),                                                                       \
+      F(type_push_queue_full, {"type", "push_queue_full"}),                                                                         \
       F(type_add_cache_succ, {"type", "add_cache_succ"}),                                                                           \
       F(type_add_cache_stale, {"type", "add_cache_stale"}),                                                                         \
       F(type_add_cache_reach_count_limit, {"type", "type_add_cache_reach_count_limit"}),                                            \

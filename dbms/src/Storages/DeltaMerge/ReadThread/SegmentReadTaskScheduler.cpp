@@ -297,7 +297,7 @@ void SegmentReadTaskScheduler::schedLoop()
         if (!schedule())
         {
             using namespace std::chrono_literals;
-            std::this_thread::sleep_for(2ms);
+            std::this_thread::sleep_for(1ms);
         }
     }
 }

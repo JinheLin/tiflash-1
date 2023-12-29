@@ -18,6 +18,7 @@
 #include <Storages/DeltaMerge/SegmentReadTaskPool.h>
 
 #include <magic_enum.hpp>
+#include <utility>
 
 namespace DB::FailPoints
 {
@@ -142,7 +143,7 @@ SegmentReadTaskPool::SegmentReadTaskPool(
     // If the queue is too short, only 1 in the extreme case, it may cause the computation thread
     // to encounter empty queues frequently, resulting in too much waiting and thread context
     // switching, so we limit the lower limit to 3, which provides two blocks of buffer space.
-    , block_slot_limit(std::max(num_streams_, 3))
+    , block_slot_limit(std::max(num_streams_, 3) * 3)
     // Limiting the minimum number of reading segments to 2 is to avoid, as much as possible,
     // situations where the computation may be faster and the storage layer may not be able to keep up.
     , active_segment_limit(std::max(num_streams_, 2))
@@ -251,8 +252,7 @@ void SegmentReadTaskPool::popBlock(Block & block)
 {
     q.pop(block);
     blk_stat.pop(block);
-    global_blk_stat.pop(block);
-    if (exceptionHappened())
+    if (unlikely(exceptionHappened()))
     {
         throw exception;
     }
@@ -263,8 +263,7 @@ bool SegmentReadTaskPool::tryPopBlock(Block & block)
     if (q.tryPop(block))
     {
         blk_stat.pop(block);
-        global_blk_stat.pop(block);
-        if (exceptionHappened())
+        if (unlikely(exceptionHappened()))
             throw exception;
         return true;
     }
@@ -277,9 +276,18 @@ bool SegmentReadTaskPool::tryPopBlock(Block & block)
 void SegmentReadTaskPool::pushBlock(Block && block)
 {
     blk_stat.push(block);
-    global_blk_stat.push(block);
     read_bytes_after_last_check += block.bytes();
-    q.push(std::move(block), nullptr);
+    size_t size;
+    q.push(std::move(block), &size);
+    GET_METRIC(tiflash_storage_read_thread_counter, type_push_queue).Increment();
+    if (size == 1)
+    {
+        GET_METRIC(tiflash_storage_read_thread_counter, type_push_queue_empty).Increment();
+    }
+    else if (std::cmp_greater_equal(size, block_slot_limit))
+    {
+        GET_METRIC(tiflash_storage_read_thread_counter, type_push_queue_full).Increment();
+    }
 }
 
 Int64 SegmentReadTaskPool::increaseUnorderedInputStreamRefCount()
