@@ -251,8 +251,7 @@ void SegmentReadTaskPool::popBlock(Block & block)
 {
     q.pop(block);
     blk_stat.pop(block);
-    global_blk_stat.pop(block);
-    if (exceptionHappened())
+    if (unlikely(exceptionHappened()))
     {
         throw exception;
     }
@@ -263,8 +262,7 @@ bool SegmentReadTaskPool::tryPopBlock(Block & block)
     if (q.tryPop(block))
     {
         blk_stat.pop(block);
-        global_blk_stat.pop(block);
-        if (exceptionHappened())
+        if (unlikely(exceptionHappened()))
             throw exception;
         return true;
     }
@@ -277,7 +275,6 @@ bool SegmentReadTaskPool::tryPopBlock(Block & block)
 void SegmentReadTaskPool::pushBlock(Block && block)
 {
     blk_stat.push(block);
-    global_blk_stat.push(block);
     read_bytes_after_last_check += block.bytes();
     q.push(std::move(block), nullptr);
 }

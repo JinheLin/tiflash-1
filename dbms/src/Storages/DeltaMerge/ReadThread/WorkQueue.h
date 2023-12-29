@@ -13,6 +13,7 @@
 // limitations under the License.
 #pragma once
 
+#include <Common/TiFlashMetrics.h>
 #include <stdint.h>
 
 #include <cassert>
@@ -107,9 +108,11 @@ public:
         {
             std::unique_lock<std::mutex> lock(mu);
             ++pop_times;
+            GET_METRIC(tiflash_storage_read_thread_counter, type_pop_queue).Increment();
             while (queue.empty() && !done)
             {
                 ++pop_empty_times;
+                GET_METRIC(tiflash_storage_read_thread_counter, type_pop_queue_empty).Increment();
                 reader_cv.wait(lock);
             }
             if (queue.empty())
@@ -138,6 +141,7 @@ public:
         {
             std::unique_lock<std::mutex> lock(mu);
             ++pop_times;
+            GET_METRIC(tiflash_storage_read_thread_counter, type_pop_queue).Increment();
             if (queue.empty())
             {
                 if (done)
@@ -147,6 +151,7 @@ public:
                 else
                 {
                     ++pop_empty_times;
+                    GET_METRIC(tiflash_storage_read_thread_counter, type_pop_queue_empty).Increment();
                     return false;
                 }
             }
