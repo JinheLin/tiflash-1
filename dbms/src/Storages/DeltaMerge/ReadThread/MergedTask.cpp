@@ -67,6 +67,7 @@ int MergedTask::readOneBlock()
     {
         if (units[cur_idx].isFinished())
         {
+            GET_METRIC(tiflash_storage_read_thread_counter, type_read_check_finish).Increment();
             continue;
         }
 
@@ -74,12 +75,17 @@ int MergedTask::readOneBlock()
 
         if (!pool->valid())
         {
+            GET_METRIC(tiflash_storage_read_thread_counter, type_read_invalid).Increment();
             setUnitFinish(cur_idx);
             continue;
         }
 
         if (pool->getFreeBlockSlots() <= 0 || pool->isRUExhausted())
         {
+            if (pool->getFreeBlockSlots() <= 0)
+                GET_METRIC(tiflash_storage_read_thread_counter, type_read_no_slot).Increment();
+            else
+                GET_METRIC(tiflash_storage_read_thread_counter, type_read_no_ru).Increment();
             continue;
         }
 
@@ -94,6 +100,7 @@ int MergedTask::readOneBlock()
         }
         else
         {
+            GET_METRIC(tiflash_storage_read_thread_counter, type_read_end).Increment();
             setUnitFinish(cur_idx);
         }
     }

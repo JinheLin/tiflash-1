@@ -146,7 +146,7 @@ SegmentReadTaskPool::SegmentReadTaskPool(
     , block_slot_limit(std::max(num_streams_, 3) * 3)
     // Limiting the minimum number of reading segments to 2 is to avoid, as much as possible,
     // situations where the computation may be faster and the storage layer may not be able to keep up.
-    , active_segment_limit(std::max(num_streams_, 2))
+    , active_segment_limit(std::max(num_streams_, 2) * 2)
     , res_group_name(res_group_name_)
 {
     if (tasks_wrapper.empty())

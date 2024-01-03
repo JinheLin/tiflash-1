@@ -585,6 +585,13 @@ static_assert(RAFT_REGION_BIG_WRITE_THRES * 4 < RAFT_REGION_BIG_WRITE_MAX, "Inva
       F(type_push_queue, {"type", "push_queue"}),                                                                                   \
       F(type_push_queue_empty, {"type", "push_queue_empty"}),                                                                       \
       F(type_push_queue_full, {"type", "push_queue_full"}),                                                                         \
+      F(type_read_finish, {"type", "read_finish"}),                                                                                 \
+      F(type_read_yield, {"type", "read_yield"}),                                                                                   \
+      F(type_read_check_finish, {"type", "read_check_finish"}),                                                                     \
+      F(type_read_invalid, {"type", "read_invalid"}),                                                                               \
+      F(type_read_no_slot, {"type", "read_no_slot"}),                                                                               \
+      F(type_read_no_ru, {"type", "read_no_ru"}),                                                                                   \
+      F(type_read_end, {"type", "read_end"}),                                                                                   \
       F(type_add_cache_succ, {"type", "add_cache_succ"}),                                                                           \
       F(type_add_cache_stale, {"type", "add_cache_stale"}),                                                                         \
       F(type_add_cache_reach_count_limit, {"type", "type_add_cache_reach_count_limit"}),                                            \

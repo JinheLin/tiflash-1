@@ -80,7 +80,12 @@ private:
             // If exception happens, `merged_task` will be released by `shared_ptr` automatically.
             if (!merged_task->allStreamsFinished())
             {
+                GET_METRIC(tiflash_storage_read_thread_counter, type_read_yield).Increment();
                 SegmentReadTaskScheduler::instance().pushMergedTask(merged_task);
+            }
+            else
+            {
+                GET_METRIC(tiflash_storage_read_thread_counter, type_read_finish).Increment();
             }
         }
         catch (DB::Exception & e)
