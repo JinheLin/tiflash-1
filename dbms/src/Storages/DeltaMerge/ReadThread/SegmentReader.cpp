@@ -48,66 +48,47 @@ public:
     std::thread::id getId() const { return t.get_id(); }
 
 private:
-    void setCPUAffinity()
+    bool isStop() { return stop.load(std::memory_order_relaxed); }
+
+    std::tuple<MergedTaskPtr, bool> popTask()
     {
-        if (cpus.empty())
-        {
-            return;
-        }
-#ifdef __linux__
-        cpu_set_t cpu_set;
-        CPU_ZERO(&cpu_set);
-        for (int i : cpus)
-        {
-            CPU_SET(i, &cpu_set);
-        }
-        int ret = sched_setaffinity(0, sizeof(cpu_set), &cpu_set);
-        if (ret != 0)
-        {
-            // It can be failed due to some CPU core cannot access, such as CPU offline.
-            LOG_WARNING(log, "sched_setaffinity fail, cpus={} errno={}", cpus, std::strerror(errno));
-        }
-        else
-        {
-            LOG_DEBUG(log, "sched_setaffinity succ, cpus={}", cpus);
-        }
-#endif
+        MergedTaskPtr merged_task;
+        bool succ = task_queue.pop(merged_task);
+        return std::make_tuple(merged_task, succ);
     }
 
-    bool isStop() { return stop.load(std::memory_order_relaxed); }
+    void pushTask(MergedTaskPtr & merged_task)
+    {
+        if (!merged_task->allStreamsFinished())
+        {
+            SegmentReadTaskScheduler::instance().pushMergedTask(merged_task);
+        }
+    }
 
     void readSegments()
     {
         MergedTaskPtr merged_task;
+        bool succ = false;
         try
         {
-            if (!task_queue.pop(merged_task))
+            std::tie(merged_task, succ) = popTask();
+            if (!succ)
             {
-                LOG_INFO(log, "Pop fail, stop={}", isStop());
+                LOG_INFO(log, "task_queue is finished, stop={}", isStop());
                 return;
             }
 
-            int read_count = 0;
             while (!merged_task->allStreamsFinished() && !isStop())
             {
-                auto c = merged_task->readBlock();
-                read_count += c;
-                if (c <= 0)
+                if (merged_task->readBlock() <= 0)
                 {
                     break;
                 }
             }
-            if (read_count <= 0)
-            {
-                LOG_DEBUG(log, "All finished, merged_task=<{}> read_count={}", merged_task->toString(), read_count);
-            }
             // If `merged_task` is pushed back to `MergedTaskPool`, it can be accessed by another read thread if it is scheduled.
             // So do not push back to `MergedTaskPool` when exception happened since current read thread can still access to this `merged_task` object and set exception message to it.
             // If exception happens, `merged_task` will be released by `shared_ptr` automatically.
-            if (!merged_task->allStreamsFinished())
-            {
-                SegmentReadTaskScheduler::instance().pushMergedTask(merged_task);
-            }
+            pushTask(merged_task);
         }
         catch (DB::Exception & e)
         {
@@ -141,7 +122,7 @@ private:
 
     void run()
     {
-        setCPUAffinity();
+        setCPUAffinity(cpus, log);
         setThreadName(name.c_str());
         while (!isStop())
         {
