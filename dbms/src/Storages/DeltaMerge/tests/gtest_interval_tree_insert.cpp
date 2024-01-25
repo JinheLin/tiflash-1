@@ -3,7 +3,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cmath>
 #include <functional>
 #include <list>
 #include <random>
@@ -17,7 +16,6 @@ struct IntervalTypes
     using tree_type = lib_interval_tree::interval_tree<interval_type>;
     using iterator_type = typename tree_type::iterator;
 };
-
 
 /**
  *  Warning this function is very expensive.
@@ -133,26 +131,14 @@ public:
     using value_type = numerical_type;
     using interval_kind = interval_kind_;
 
-#ifndef INTERVAL_TREE_SAFE_INTERVALS
-#if __cplusplus >= 201703L
-    constexpr
-#endif
-        multi_join_interval(value_type low, value_type high)
+    constexpr multi_join_interval(value_type low, value_type high)
         : low_{low}
         , high_{high}
     {
         if (low > high)
             throw std::invalid_argument("Low border is not lower or equal to high border.");
     }
-#else
-#if __cplusplus >= 201703L
-    constexpr
-#endif
-        multi_join_interval(value_type low, value_type high)
-        : low_{std::min(low, high)}
-        , high_{std::max(low, high)}
-    {}
-#endif
+
     virtual ~multi_join_interval() = default;
     friend bool operator==(multi_join_interval const & lhs, multi_join_interval const & other)
     {
@@ -199,8 +185,7 @@ protected:
     value_type high_;
 };
 
-
-class InsertTests : public ::testing::Test
+class IntervalTreeInsertTests : public ::testing::Test
 {
 public:
     using types = IntervalTypes<int>;
@@ -212,7 +197,7 @@ protected:
     std::uniform_int_distribution<int> distLarge{-50000, 50000};
 };
 
-TEST_F(InsertTests, InsertIntoEmpty1)
+TEST_F(IntervalTreeInsertTests, InsertIntoEmpty1)
 {
     auto inserted_interval = types::interval_type{0, 16};
 
@@ -221,7 +206,7 @@ TEST_F(InsertTests, InsertIntoEmpty1)
     EXPECT_EQ(tree.size(), 1);
 }
 
-TEST_F(InsertTests, InsertIntoEmpty2)
+TEST_F(IntervalTreeInsertTests, InsertIntoEmpty2)
 {
     auto inserted_interval = types::interval_type{-45, 16};
 
@@ -230,7 +215,7 @@ TEST_F(InsertTests, InsertIntoEmpty2)
     EXPECT_EQ(tree.size(), 1);
 }
 
-TEST_F(InsertTests, InsertMultipleIntoEmpty)
+TEST_F(IntervalTreeInsertTests, InsertMultipleIntoEmpty)
 {
     auto firstInterval = types::interval_type{0, 16};
     auto secondInterval = types::interval_type{5, 13};
@@ -244,7 +229,7 @@ TEST_F(InsertTests, InsertMultipleIntoEmpty)
     EXPECT_EQ(*(++tree.begin()), secondInterval);
 }
 
-TEST_F(InsertTests, TreeHeightHealthynessTest)
+TEST_F(IntervalTreeInsertTests, TreeHeightHealthynessTest)
 {
     constexpr int amount = 100'000;
 
@@ -254,7 +239,7 @@ TEST_F(InsertTests, TreeHeightHealthynessTest)
     testTreeHeightHealth(tree);
 }
 
-TEST_F(InsertTests, MaxValueTest1)
+TEST_F(IntervalTreeInsertTests, MaxValueTest1)
 {
     constexpr int amount = 100'000;
 
@@ -264,7 +249,7 @@ TEST_F(InsertTests, MaxValueTest1)
     testMaxProperty(tree);
 }
 
-TEST_F(InsertTests, RBPropertyInsertTest)
+TEST_F(IntervalTreeInsertTests, RBPropertyInsertTest)
 {
     constexpr int amount = 1000;
 
@@ -274,7 +259,7 @@ TEST_F(InsertTests, RBPropertyInsertTest)
     testRedBlackPropertyViolation(tree);
 }
 
-TEST_F(InsertTests, IntervalsMayReturnMultipleIntervalsForJoin)
+TEST_F(IntervalTreeInsertTests, IntervalsMayReturnMultipleIntervalsForJoin)
 {
     using interval_type = multi_join_interval<int>;
     using tree_type = lib_interval_tree::interval_tree<interval_type>;
