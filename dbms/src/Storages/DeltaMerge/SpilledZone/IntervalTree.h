@@ -3,10 +3,7 @@
 #include <Storages/DeltaMerge/SpilledZone/IntervalTree_fwd.h>
 #include <Storages/DeltaMerge/SpilledZone/IntervalTypes.h>
 
-#include <cstdio>
-#include <iostream>
 #include <iterator>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
