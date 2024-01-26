@@ -48,8 +48,6 @@ public:
         , color_{rb_color::fail}
     {}
 
-    ~node() {}
-
     interval_type interval() const { return interval_; }
 
     value_type max() const { return max_; }
