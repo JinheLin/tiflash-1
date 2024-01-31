@@ -402,64 +402,44 @@ public:
         return out;
     }
 
-    void findOverlappingIntervals(const Interval & interval, Intervals & out, bool boundary) const
+    Intervals findOverlappingIntervals(const Interval & interval, bool boundary) const
     {
-        if (!out.empty())
-        {
-            out.clear();
-        }
-
+        Intervals out;
         if (m_root != m_nill)
         {
             subtreeOverlappingIntervals(m_root, interval, boundary, Appender{out});
         }
-
-        out.shrink_to_fit();
+        return out;
     }
 
-    void findInnerIntervals(const Interval & interval, Intervals & out, bool boundary) const
+    Intervals findInnerIntervals(const Interval & interval, bool boundary) const
     {
-        if (!out.empty())
-        {
-            out.clear();
-        }
-
+        Intervals out;
         if (m_root != m_nill)
         {
             subtreeInnerIntervals(m_root, interval, boundary, Appender{out});
         }
-
-        out.shrink_to_fit();
+        return out;
     }
 
-    void findOuterIntervals(const Interval & interval, Intervals & out, bool boundary) const
+    Intervals findOuterIntervals(const Interval & interval, bool boundary) const
     {
-        if (!out.empty())
-        {
-            out.clear();
-        }
-
+        Intervals out;
         if (m_root != m_nill)
         {
             subtreeOuterIntervals(m_root, interval, boundary, Appender{out});
         }
-
-        out.shrink_to_fit();
+        return out;
     }
 
-    void findIntervalsContainPoint(const IntervalType & point, Intervals & out, bool boundary) const
+    void findIntervalsContainPoint(const IntervalType & point, bool boundary) const
     {
-        if (!out.empty())
-        {
-            out.clear();
-        }
-
+        Intervals out;
         if (m_root != m_nill)
         {
             subtreeIntervalsContainPoint(m_root, point, boundary, Appender{out});
         }
-
-        out.shrink_to_fit();
+        return out;
     }
 
     size_type countOverlappingIntervals(const Interval & interval, bool boundary) const

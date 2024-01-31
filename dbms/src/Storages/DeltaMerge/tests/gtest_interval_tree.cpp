@@ -1,7 +1,6 @@
 #include <Storages/DeltaMerge/UncommittedZone/IntervalTree.h>
 #include <gtest/gtest.h>
 
-#include <iostream>
 namespace DB::DM::tests
 {
 TEST(IntervalTree_test, FindOverlap)
@@ -13,11 +12,22 @@ TEST(IntervalTree_test, FindOverlap)
     tree.insert({20, 30});
 
     {
-        IntervalTree<int, int>::Intervals overlaps;
         // Find overlap with [10, 20)
-        tree.findOverlappingIntervals({10, 20}, overlaps, false);
+        auto overlaps = tree.findOverlappingIntervals({10, 20}, false);
         ASSERT_EQ(overlaps.size(), 1);
         ASSERT_EQ(overlaps.front(), (IntervalTree<int, int>::Interval{10, 20}));
+    }
+
+    {
+        // Find overlap with [10, 10)
+        auto overlaps = tree.findOverlappingIntervals({10, 10}, false);
+        ASSERT_TRUE(overlaps.empty());
+    }
+
+    {
+        // Find overlap with [30, 30)
+        auto overlaps = tree.findOverlappingIntervals({30, 30}, false);
+        ASSERT_TRUE(overlaps.empty());
     }
 }
 
@@ -36,6 +46,5 @@ TEST(IntervalTree_test, Find)
     auto v3 = tree.find({5, 15});
     ASSERT_FALSE(v3.has_value());
 }
-
 
 } // namespace DB::DM::tests
