@@ -273,16 +273,16 @@ public:
                 }
                 else
                 {
-                    auto nextValueNode = node->right;
-                    while (nextValueNode->left != m_nill)
+                    auto next_value_node = node->right;
+                    while (next_value_node->left != m_nill)
                     {
-                        nextValueNode = nextValueNode->left;
+                        next_value_node = next_value_node->left;
                     }
-                    node->intervals = std::move(nextValueNode->intervals);
-                    node->high = std::move(nextValueNode->high);
+                    node->intervals = std::move(next_value_node->intervals);
+                    node->high = std::move(next_value_node->high);
                     removeFixNodeLimits(node);
-                    node = nextValueNode;
-                    child = nextValueNode->right;
+                    node = next_value_node;
+                    child = next_value_node->right;
                 }
 
                 if (child == m_nill && node->parent == m_nill)
@@ -402,7 +402,7 @@ public:
         return out;
     }
 
-    void findOverlappingIntervals(const Interval & interval, Intervals & out, bool boundary = true) const
+    void findOverlappingIntervals(const Interval & interval, Intervals & out, bool boundary) const
     {
         if (!out.empty())
         {
@@ -417,15 +417,7 @@ public:
         out.shrink_to_fit();
     }
 
-    Intervals findOverlappingIntervals(const Interval & interval, bool boundary = true) const
-    {
-        Intervals out;
-        out.reserve(m_size * VECTOR_RESERVE_RATE);
-        findOverlappingIntervals(interval, out, boundary);
-        return out;
-    }
-
-    void findInnerIntervals(const Interval & interval, Intervals & out, bool boundary = true) const
+    void findInnerIntervals(const Interval & interval, Intervals & out, bool boundary) const
     {
         if (!out.empty())
         {
@@ -440,15 +432,7 @@ public:
         out.shrink_to_fit();
     }
 
-    Intervals findInnerIntervals(const Interval & interval, bool boundary = true) const
-    {
-        Intervals out;
-        out.reserve(m_size * VECTOR_RESERVE_RATE);
-        findInnerIntervals(interval, out, boundary);
-        return out;
-    }
-
-    void findOuterIntervals(const Interval & interval, Intervals & out, bool boundary = true) const
+    void findOuterIntervals(const Interval & interval, Intervals & out, bool boundary) const
     {
         if (!out.empty())
         {
@@ -463,15 +447,7 @@ public:
         out.shrink_to_fit();
     }
 
-    Intervals findOuterIntervals(const Interval & interval, bool boundary = true) const
-    {
-        Intervals out;
-        out.reserve(m_size * VECTOR_RESERVE_RATE);
-        findOuterIntervals(interval, out, boundary);
-        return out;
-    }
-
-    void findIntervalsContainPoint(const IntervalType & point, Intervals & out, bool boundary = true) const
+    void findIntervalsContainPoint(const IntervalType & point, Intervals & out, bool boundary) const
     {
         if (!out.empty())
         {
@@ -486,15 +462,7 @@ public:
         out.shrink_to_fit();
     }
 
-    Intervals findIntervalsContainPoint(const IntervalType & point, bool boundary = true) const
-    {
-        Intervals out;
-        out.reserve(m_size * VECTOR_RESERVE_RATE);
-        findIntervalsContainPoint(point, out, boundary);
-        return out;
-    }
-
-    size_type countOverlappingIntervals(const Interval & interval, bool boundary = true) const
+    size_type countOverlappingIntervals(const Interval & interval, bool boundary) const
     {
         size_type count = 0;
 
@@ -506,7 +474,7 @@ public:
         return count;
     }
 
-    size_type countInnerIntervals(const Interval & interval, bool boundary = true) const
+    size_type countInnerIntervals(const Interval & interval, bool boundary) const
     {
         size_type count = 0;
 
@@ -518,7 +486,7 @@ public:
         return count;
     }
 
-    size_type countOuterIntervals(const Interval & interval, bool boundary = true) const
+    size_type countOuterIntervals(const Interval & interval, bool boundary) const
     {
         size_type count = 0;
 
@@ -530,7 +498,7 @@ public:
         return count;
     }
 
-    size_type countIntervalsContainPoint(const IntervalType & point, bool boundary = true) const
+    size_type countIntervalsContainPoint(const IntervalType & point, bool boundary) const
     {
         size_type count = 0;
 
