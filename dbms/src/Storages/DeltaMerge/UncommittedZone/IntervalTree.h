@@ -33,7 +33,6 @@ struct Interval
     using interval_type = typename std::decay<IntervalType>::type;
     using value_type = typename std::decay<ValueType>::type;
 
-
     template <
         typename I,
         typename V = ValueType,
@@ -44,7 +43,6 @@ struct Interval
         , high(std::max(a, b))
         , value(val)
     {}
-
 
     template <
         typename I,
@@ -57,7 +55,6 @@ struct Interval
         , value(std::forward<V>(val))
     {}
 
-
     template <
         typename I,
         typename V = ValueType,
@@ -68,7 +65,6 @@ struct Interval
         , high(std::forward<I>(b < a ? a : b))
         , value(val)
     {}
-
 
     template <
         typename I,
@@ -81,14 +77,12 @@ struct Interval
         , value(std::forward<V>(val))
     {}
 
-
     template <
         typename V = ValueType,
         typename = typename std::enable_if<std::is_scalar<typename std::decay<V>::type>::value>::type>
     explicit Interval(const std::tuple<IntervalType, IntervalType> & interval, V val = {})
         : Interval(std::get<0>(interval), std::get<1>(interval), val)
     {}
-
 
     template <
         typename V = ValueType,
@@ -97,13 +91,11 @@ struct Interval
         : Interval(std::get<0>(interval), std::get<1>(interval), std::forward<V>(val))
     {}
 
-
     Interval(const Interval &) = default;
     Interval(Interval &&) = default;
     Interval & operator=(const Interval &) = default;
     Interval & operator=(Interval &&) = default;
     virtual ~Interval() = default;
-
 
     bool operator==(const Interval & other) const
     {
@@ -112,9 +104,7 @@ struct Interval
             || other.value < value);
     }
 
-
     bool operator<(const Interval & other) const { return (low < other.low || high < other.high); }
-
 
     interval_type low;
     interval_type high;
@@ -130,12 +120,10 @@ public:
     using Intervals = std::vector<Interval>;
     using size_type = std::size_t;
 
-
     IntervalTree()
         : m_nill(new Node())
         , m_root(m_nill)
     {}
-
 
     template <typename Container>
     explicit IntervalTree(const Container & intervals)
@@ -146,7 +134,6 @@ public:
             insert(interval);
         }
     }
-
 
     template <typename ForwardIterator>
     IntervalTree(ForwardIterator begin, const ForwardIterator & end)
@@ -159,7 +146,6 @@ public:
         }
     }
 
-
     virtual ~IntervalTree()
     {
         if (nullptr != m_root)
@@ -170,13 +156,11 @@ public:
         delete m_nill;
     }
 
-
     IntervalTree(const IntervalTree & other)
         : m_nill(new Node())
         , m_root(copySubtree(other.m_root, other.m_nill, m_nill))
         , m_size(other.m_size)
     {}
-
 
     IntervalTree(IntervalTree && other) noexcept
         : m_nill(other.m_nill)
@@ -186,7 +170,6 @@ public:
         other.m_nill = nullptr;
         other.m_root = nullptr;
     }
-
 
     IntervalTree & operator=(const IntervalTree & other)
     {
@@ -198,13 +181,11 @@ public:
         return *this;
     }
 
-
     IntervalTree & operator=(IntervalTree && other) noexcept
     {
         other.swap(*this);
         return *this;
     }
-
 
     void swap(IntervalTree & other) noexcept
     {
@@ -212,7 +193,6 @@ public:
         std::swap(m_root, other.m_root);
         std::swap(m_size, other.m_size);
     }
-
 
     bool insert(Interval interval)
     {
@@ -266,7 +246,6 @@ public:
         // Value already exists
         return false;
     }
-
 
     bool remove(const Interval & interval)
     {
@@ -376,7 +355,6 @@ public:
         return false;
     }
 
-
     bool contains(const Interval & interval) const
     {
         assert(nullptr != m_root && nullptr != m_nill);
@@ -394,7 +372,6 @@ public:
         return isNodeHasInterval(node, interval);
     }
 
-
     Intervals intervals() const
     {
         Intervals out;
@@ -407,7 +384,6 @@ public:
 
         return out;
     }
-
 
     void findOverlappingIntervals(const Interval & interval, Intervals & out, bool boundary = true) const
     {
@@ -424,7 +400,6 @@ public:
         out.shrink_to_fit();
     }
 
-
     Intervals findOverlappingIntervals(const Interval & interval, bool boundary = true) const
     {
         Intervals out;
@@ -432,7 +407,6 @@ public:
         findOverlappingIntervals(interval, out, boundary);
         return out;
     }
-
 
     void findInnerIntervals(const Interval & interval, Intervals & out, bool boundary = true) const
     {
@@ -449,7 +423,6 @@ public:
         out.shrink_to_fit();
     }
 
-
     Intervals findInnerIntervals(const Interval & interval, bool boundary = true) const
     {
         Intervals out;
@@ -457,7 +430,6 @@ public:
         findInnerIntervals(interval, out, boundary);
         return out;
     }
-
 
     void findOuterIntervals(const Interval & interval, Intervals & out, bool boundary = true) const
     {
@@ -474,7 +446,6 @@ public:
         out.shrink_to_fit();
     }
 
-
     Intervals findOuterIntervals(const Interval & interval, bool boundary = true) const
     {
         Intervals out;
@@ -482,7 +453,6 @@ public:
         findOuterIntervals(interval, out, boundary);
         return out;
     }
-
 
     void findIntervalsContainPoint(const IntervalType & point, Intervals & out, bool boundary = true) const
     {
@@ -499,7 +469,6 @@ public:
         out.shrink_to_fit();
     }
 
-
     Intervals findIntervalsContainPoint(const IntervalType & point, bool boundary = true) const
     {
         Intervals out;
@@ -507,7 +476,6 @@ public:
         findIntervalsContainPoint(point, out, boundary);
         return out;
     }
-
 
     size_type countOverlappingIntervals(const Interval & interval, bool boundary = true) const
     {
@@ -521,7 +489,6 @@ public:
         return count;
     }
 
-
     size_type countInnerIntervals(const Interval & interval, bool boundary = true) const
     {
         size_type count = 0;
@@ -533,7 +500,6 @@ public:
 
         return count;
     }
-
 
     size_type countOuterIntervals(const Interval & interval, bool boundary = true) const
     {
@@ -547,7 +513,6 @@ public:
         return count;
     }
 
-
     size_type countIntervalsContainPoint(const IntervalType & point, bool boundary = true) const
     {
         size_type count = 0;
@@ -560,12 +525,9 @@ public:
         return count;
     }
 
-
     bool isEmpty() const { return (0 == m_size); }
 
-
     size_type size() const { return m_size; }
-
 
     void clear()
     {
@@ -576,7 +538,6 @@ public:
         m_size = 0;
     }
 
-
 private:
     enum class Color : char
     {
@@ -584,13 +545,11 @@ private:
         Red
     };
 
-
     enum class Position : char
     {
         Left,
         Right
     };
-
 
     struct Appender final
     {
@@ -603,7 +562,6 @@ private:
         Intervals & intervals;
     };
 
-
     struct Counter final
     {
         template <typename Interval>
@@ -615,7 +573,6 @@ private:
         size_type & count;
     };
 
-
     struct HighComparator final
     {
         template <typename T>
@@ -624,7 +581,6 @@ private:
             return (lhs.high < rhs.high);
         }
     };
-
 
     struct Node
     {
@@ -655,7 +611,6 @@ private:
         Intervals intervals;
     };
 
-
     Node * copySubtree(Node * otherNode, Node * otherNill, Node * parent) const
     {
         assert(nullptr != otherNode && nullptr != otherNill && nullptr != parent);
@@ -678,7 +633,6 @@ private:
         return node;
     }
 
-
     void destroySubtree(Node * node) const
     {
         assert(nullptr != node);
@@ -693,7 +647,6 @@ private:
 
         delete node;
     }
-
 
     Node * findNode(Node * node, const Interval & interval) const
     {
@@ -717,7 +670,6 @@ private:
         return (child == m_nill) ? node : findNode(child, interval);
     }
 
-
     Node * siblingNode(Node * node) const
     {
         assert(nullptr != node);
@@ -725,7 +677,6 @@ private:
         return (Position::Left == nodePosition(node)) ? childNode(node->parent, Position::Right)
                                                       : childNode(node->parent, Position::Left);
     }
-
 
     Node * childNode(Node * node, Position position) const
     {
@@ -742,7 +693,6 @@ private:
             return nullptr;
         }
     }
-
 
     void setChildNode(Node * node, Node * child, Position position) const
     {
@@ -768,14 +718,12 @@ private:
         }
     }
 
-
     Position nodePosition(Node * node) const
     {
         assert(nullptr != node && nullptr != node->parent);
 
         return (node->parent->left == node) ? Position::Left : Position::Right;
     }
-
 
     void createChildNode(Node * parent, Interval interval, Position position)
     {
@@ -789,13 +737,11 @@ private:
         ++m_size;
     }
 
-
     void destroyNode(Node * node)
     {
         --m_size;
         delete node;
     }
-
 
     void updateNodeLimits(Node * node) const
     {
@@ -819,14 +765,12 @@ private:
         }
     }
 
-
     bool isNodeAboutToBeDestroyed(Node * node) const
     {
         assert(nullptr != node);
 
         return (node != m_nill && node->intervals.empty());
     }
-
 
     void subtreeIntervals(Node * node, Intervals & out) const
     {
@@ -843,7 +787,6 @@ private:
 
         subtreeIntervals(node->right, out);
     }
-
 
     template <typename Callback>
     void subtreeOverlappingIntervals(Node * node, const Interval & interval, bool boundary, Callback && callback) const
@@ -879,7 +822,6 @@ private:
         }
     }
 
-
     template <typename Callback>
     void subtreeInnerIntervals(Node * node, const Interval & interval, bool boundary, Callback && callback) const
     {
@@ -912,7 +854,6 @@ private:
             subtreeInnerIntervals(node->right, interval, boundary, std::forward<Callback>(callback));
         }
     }
-
 
     template <typename Callback>
     void subtreeOuterIntervals(Node * node, const Interval & interval, bool boundary, Callback && callback) const
@@ -948,7 +889,6 @@ private:
         }
     }
 
-
     template <typename Callback>
     void subtreeIntervalsContainPoint(Node * node, const IntervalType & point, bool boundary, Callback && callback)
         const
@@ -983,14 +923,12 @@ private:
         }
     }
 
-
     bool isNodeHasInterval(Node * node, const Interval & interval) const
     {
         assert(nullptr != node);
 
         return (node->intervals.cend() != std::find(node->intervals.cbegin(), node->intervals.cend(), interval));
     }
-
 
     IntervalType findHighest(const Intervals & intervals) const
     {
@@ -1003,12 +941,9 @@ private:
         return it->high;
     }
 
-
     bool isNotEqual(const IntervalType & lhs, const IntervalType & rhs) const { return (lhs < rhs || rhs < lhs); }
 
-
     bool isEqual(const IntervalType & lhs, const IntervalType & rhs) const { return !isNotEqual(lhs, rhs); }
-
 
     void swapRelations(Node * node, Node * child)
     {
@@ -1027,7 +962,6 @@ private:
             setChildNode(node->parent, child, nodePosition(node));
         }
     }
-
 
     void rotateCommon(Node * node, Node * child) const
     {
@@ -1049,7 +983,6 @@ private:
         }
     }
 
-
     Node * rotateLeft(Node * node)
     {
         assert(nullptr != node && nullptr != node->right);
@@ -1063,7 +996,6 @@ private:
         return child;
     }
 
-
     Node * rotateRight(Node * node)
     {
         assert(nullptr != node && nullptr != node->left);
@@ -1076,7 +1008,6 @@ private:
 
         return child;
     }
-
 
     Node * rotate(Node * node)
     {
@@ -1093,7 +1024,6 @@ private:
             return nullptr;
         }
     }
-
 
     void insertionFixNodeLimits(Node * node)
     {
@@ -1123,7 +1053,6 @@ private:
             node = node->parent;
         }
     }
-
 
     void removeFixNodeLimits(Node * node, size_type minRange = 0)
     {
@@ -1155,7 +1084,6 @@ private:
             ++range;
         }
     }
-
 
     void insertionFix(Node * node)
     {
@@ -1191,7 +1119,6 @@ private:
             node->color = Color::Black;
         }
     }
-
 
     void removeFix(Node * node)
     {
@@ -1235,12 +1162,10 @@ private:
         }
     }
 
-
     Node * m_nill;
     Node * m_root;
     size_type m_size{0};
 };
-
 
 template <typename IntervalType, typename ValueType>
 void swap(IntervalTree<IntervalType, ValueType> & lhs, IntervalTree<IntervalType, ValueType> & rhs)
@@ -1249,7 +1174,6 @@ void swap(IntervalTree<IntervalType, ValueType> & lhs, IntervalTree<IntervalType
 }
 
 } // namespace DB::DM
-
 
 template <typename IntervalType, typename ValueType>
 std::ostream & operator<<(std::ostream & out, const DB::DM::Interval<IntervalType, ValueType> & interval)
@@ -1261,7 +1185,6 @@ std::ostream & operator<<(std::ostream & out, const DB::DM::Interval<IntervalTyp
     }
     return out;
 }
-
 
 template <typename IntervalType, typename ValueType>
 std::ostream & operator<<(std::ostream & out, const DB::DM::IntervalTree<IntervalType, ValueType> & tree)
