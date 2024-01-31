@@ -97,10 +97,7 @@ struct Interval
     Interval & operator=(Interval &&) = default;
     virtual ~Interval() = default;
 
-    bool operator==(const Interval & other) const
-    {
-        return other.low == low && other.high == high;
-    }
+    bool operator==(const Interval & other) const { return other.low == low && other.high == high; }
 
     bool operator<(const Interval & other) const { return (low < other.low || high < other.high); }
 
