@@ -38,8 +38,10 @@ TEST(IntervalTree_test, Find)
     
     auto v1 = tree.find({1, 10});
     ASSERT_TRUE(v1.has_value());
+    ASSERT_EQ(*v1, 110);
     auto v2 = tree.find({20, 30});
     ASSERT_TRUE(v2.has_value());
+    ASSERT_EQ(*v2, 2030);
     auto v3 = tree.find({5, 15});
     ASSERT_FALSE(v3.has_value());
 }
