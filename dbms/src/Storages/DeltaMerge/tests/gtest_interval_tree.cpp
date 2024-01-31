@@ -6,11 +6,11 @@ namespace DB::DM::tests
 {
 TEST(IntervalTree_test, FindOverlap)
 {
-    IntervalTree<int> tree;
+    IntervalTree<int, int> tree;
     tree.insert({1, 10});
     tree.insert({20, 30});
     {
-        IntervalTree<int>::Intervals overlaps;
+        IntervalTree<int, int>::Intervals overlaps;
         tree.findOverlappingIntervals({10, 20}, overlaps, true);
         for (const auto & o : overlaps)
         {
@@ -20,7 +20,7 @@ TEST(IntervalTree_test, FindOverlap)
     }
 
     {
-        IntervalTree<int>::Intervals overlaps;
+        IntervalTree<int, int>::Intervals overlaps;
         tree.findOverlappingIntervals({10, 20}, overlaps, false);
         for (const auto & o : overlaps)
         {

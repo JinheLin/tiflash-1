@@ -27,7 +27,7 @@ namespace DB::DM
 
 constexpr static const double VECTOR_RESERVE_RATE = 0.25;
 
-template <typename IntervalType, typename ValueType = size_t>
+template <typename IntervalType, typename ValueType>
 struct Interval
 {
     using interval_type = typename std::decay<IntervalType>::type;
@@ -122,7 +122,7 @@ struct Interval
 };
 
 
-template <typename IntervalType, typename ValueType = size_t>
+template <typename IntervalType, typename ValueType>
 class IntervalTree
 {
 public:
