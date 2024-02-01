@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <ostream>
+#include <optional>
 #include <tuple>
 #include <utility>
 #include <vector>
