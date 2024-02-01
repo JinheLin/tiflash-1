@@ -400,6 +400,10 @@ public:
         return out;
     }
 
+    // If `boundary` is true, two intervals are intersecting if `left1 <= right2 && left2 <= right1`,
+    // equivalent to all intervals are closed.
+    // If `boundary` is false, two intervals are intersecting if `left1 < right2 && left2 < right1`,
+    // equivalent to all intervals are left-closed and right-open.
     Intervals findOverlappingIntervals(const Interval & interval, bool boundary) const
     {
         Intervals out;
