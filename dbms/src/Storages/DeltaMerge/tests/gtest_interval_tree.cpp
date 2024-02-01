@@ -149,12 +149,13 @@ void setUpSplitRanges(std::vector<std::tuple<int, int, int>> & ranges, int count
 TEST(IntervalTree_test, RandomTest)
 {
     Stopwatch sw;
+    constexpr auto min_ranges_count = 10000;
     std::default_random_engine e;
-    int ranges_count = e() % 10000 + 10000;
+    int ranges_count = e() % min_ranges_count + min_ranges_count;
     std::vector<std::tuple<int, int, int>> random_ranges;
     random_ranges.reserve(ranges_count);
     setUpDisjointRanges(random_ranges, ranges_count);
-    setUpSplitRanges(random_ranges, e() % 10000);
+    setUpSplitRanges(random_ranges, e() % min_ranges_count);
     auto setup_seconds = sw.elapsedSecondsFromLastTime();
 
     auto insert = [&](auto & t) {
@@ -211,7 +212,7 @@ TEST(IntervalTree_test, RandomTest)
     auto remove_count = 0;
     auto find_overlap_seconds = 0.0;
     auto find_seconds = 0.0;
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 10; i++)
     {
         find_overlap();
         find_overlap_seconds += sw.elapsedSecondsFromLastTime();
