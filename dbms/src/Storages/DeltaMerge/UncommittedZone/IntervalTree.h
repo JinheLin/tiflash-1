@@ -1129,11 +1129,4 @@ private:
     Node * m_root;
     size_type m_size{0};
 };
-
-template <typename IntervalType, typename ValueType>
-void swap(IntervalTree<IntervalType, ValueType> & lhs, IntervalTree<IntervalType, ValueType> & rhs)
-{
-    lhs.swap(rhs);
-}
-
 } // namespace DB::DM
