@@ -25,8 +25,6 @@
 namespace DB::DM
 {
 
-constexpr static const double VECTOR_RESERVE_RATE = 0.25;
-
 template <typename IntervalType, typename ValueType>
 struct Interval
 {
@@ -1139,21 +1137,3 @@ void swap(IntervalTree<IntervalType, ValueType> & lhs, IntervalTree<IntervalType
 }
 
 } // namespace DB::DM
-
-template <typename IntervalType, typename ValueType>
-std::ostream & operator<<(std::ostream & out, const DB::DM::Interval<IntervalType, ValueType> & interval)
-{
-    out << "Interval(" << interval.low << ", " << interval.high << ")";
-    if (interval.value != ValueType{})
-    {
-        out << ": " << interval.value;
-    }
-    return out;
-}
-
-template <typename IntervalType, typename ValueType>
-std::ostream & operator<<(std::ostream & out, const DB::DM::IntervalTree<IntervalType, ValueType> & tree)
-{
-    out << "IntervalTree(" << tree.size() << ")";
-    return out;
-}
