@@ -1,5 +1,11 @@
+#include <Common/Exception.h>
+#include <Common/Logger.h>
+#include <Common/Stopwatch.h>
 #include <Storages/DeltaMerge/UncommittedZone/IntervalTree.h>
+#include <common/logger_useful.h>
 #include <gtest/gtest.h>
+
+#include <list>
 #include <random>
 
 namespace DB::DM::tests
@@ -78,19 +84,28 @@ public:
     {
         Intervals out;
         std::copy_if(
-            intervals.cbegin(), 
-            intervals.cend(), 
-            std::back_inserter(out), 
+            intervals.cbegin(),
+            intervals.cend(),
+            std::back_inserter(out),
             [&interval, boundary](const auto & a) {
                 return boundary ? closedIntersecting(interval, a) : rightOpenIntersecting(interval, a);
-        });
+            });
         return out;
     }
 
-    size_t size() const
+    bool remove(const Interval & interval)
     {
-        return intervals.size();
+        auto itr = std::find(intervals.cbegin(), intervals.cend(), interval);
+        if (itr != intervals.cend())
+        {
+            intervals.erase(itr);
+            return true;
+        }
+        return false;
     }
+
+    size_t size() const { return intervals.size(); }
+
 private:
     static bool rightOpenIntersecting(const Interval & a, const Interval & b)
     {
@@ -100,69 +115,120 @@ private:
     {
         return a.low <= b.high && b.low <= a.high;
     }
-    
-    Intervals intervals;
+
+    std::list<Interval> intervals;
 };
 
-void setUpDisjointRanges(std::vector<std::pair<int, int>> & ranges, int count)
+void setUpDisjointRanges(std::vector<std::tuple<int, int, int>> & ranges, int count)
 {
     constexpr auto range_max_step_length = 10000;
     ranges.reserve(count);
     std::default_random_engine e;
-    int left = 0;
-    for (int i = 0; i < count; i++) {
-        int right = left + e() % range_max_step_length + 1;
-        ranges.emplace_back(left, right);
-        left = right + 1;
+    int low = 0;
+    for (int i = 0; i < count; i++)
+    {
+        int high = low + e() % range_max_step_length + 1;
+        ranges.emplace_back(low, high, e());
+        low = high + 1;
     }
 }
 
-void setUpSplitRanges(std::vector<std::pair<int, int>> & ranges, int count)
+void setUpSplitRanges(std::vector<std::tuple<int, int, int>> & ranges, int count)
 {
     std::default_random_engine e;
-    for (int i = 0; i < count; i++) {
-        auto t = e() % ranges.size();
-        auto [left, right] = ranges[t];
-        auto mid = (left + right) / 2;
-        ranges.emplace_back(left, mid);
-        ranges.emplace_back(mid, right);
-    }
-}
-
-template<typename T>
-void insert(T & t, const std::vector<std::pair<int, int>> & ranges)
-{
-    for (auto [l, h] : ranges)
+    for (int i = 0; i < count; i++)
     {
-        t.insert({l, h});
+        auto t = e() % ranges.size();
+        auto [low, high, value] = ranges[t];
+        auto mid = (low + high) / 2;
+        ranges.emplace_back(low, high, value);
+        ranges.emplace_back(mid, high, value);
     }
 }
 
 TEST(IntervalTree_test, RandomTest)
 {
+    Stopwatch sw;
     std::default_random_engine e;
     int ranges_count = e() % 10000 + 10000;
-    std::vector<std::pair<int, int>> random_ranges;
+    std::vector<std::tuple<int, int, int>> random_ranges;
     random_ranges.reserve(ranges_count);
     setUpDisjointRanges(random_ranges, ranges_count);
     setUpSplitRanges(random_ranges, e() % 10000);
+    auto setup_seconds = sw.elapsedSecondsFromLastTime();
+
+    auto insert = [&](auto & t) {
+        for (auto [l, h, v] : random_ranges)
+        {
+            t.insert({l, h, v});
+        }
+    };
 
     SequenceInterval seq;
-    insert(seq, random_ranges);
+    insert(seq);
     ITree tree;
-    insert(tree, random_ranges);
+    insert(tree);
     ASSERT_EQ(tree.size(), seq.size());
+    auto insert_seconds = sw.elapsedSecondsFromLastTime();
 
-    for (auto [l, h] : random_ranges)
-    {
-        auto seq_overlaps = seq.findOverlappingIntervals({l, h}, false);
-        auto tree_overlaps = tree.findOverlappingIntervals({l, h}, false);
-        ASSERT_EQ(seq_overlaps.size(), tree_overlaps.size());
-        for (const auto & interval : seq_overlaps)
+    auto find_overlap = [&]() {
+        for (auto [l, h, v] : random_ranges)
         {
-            ASSERT_NE(std::find(tree_overlaps.cbegin(), tree_overlaps.cend(), interval), tree_overlaps.cend());
+            auto seq_overlaps = seq.findOverlappingIntervals({l, h}, false);
+            auto tree_overlaps = tree.findOverlappingIntervals({l, h}, false);
+            ASSERT_EQ(seq_overlaps.size(), tree_overlaps.size());
+            for (const auto & interval : seq_overlaps)
+            {
+                auto itr = std::find(tree_overlaps.cbegin(), tree_overlaps.cend(), interval);
+                ASSERT_NE(itr, tree_overlaps.cend());
+                ASSERT_EQ(itr->value, v);
+            }
         }
+    };
+
+    auto find = [&]() {
+        for (auto [l, h, v] : random_ranges)
+        {
+            auto seq_v = seq.find({l, h});
+            auto tree_v = tree.find({l, h});
+            ASSERT_EQ(seq_v, tree_v);
+            if (tree_v)
+            {
+                ASSERT_EQ(*tree_v, v);
+            }
+        }
+    };
+
+    auto remove_random = [&]() {
+        auto i = e() % random_ranges.size();
+        auto [l, h, v] = random_ranges[i];
+        auto r1 = seq.remove({l, h});
+        auto r2 = tree.remove({l, h});
+        RUNTIME_CHECK(r1 == r2);
+        return r1;
+    };
+
+    auto remove_count = 0;
+    auto find_overlap_seconds = 0.0;
+    auto find_seconds = 0.0;
+    for (int i = 0; i < 100; i++)
+    {
+        find_overlap();
+        find_overlap_seconds += sw.elapsedSecondsFromLastTime();
+        find();
+        find_seconds += sw.elapsedSecondsFromLastTime();
+
+        remove_count += remove_random();
     }
+
+    LOG_INFO(
+        Logger::get(),
+        "setup_seconds={}, insert_seconds={}, find_overlap_seconds={}, find_seconds={}, remove_count={}",
+        setup_seconds,
+        insert_seconds,
+        find_overlap_seconds,
+        find_seconds,
+        remove_count);
 }
 
 } // namespace DB::DM::tests
