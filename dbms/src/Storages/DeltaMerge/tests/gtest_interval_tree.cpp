@@ -11,15 +11,15 @@
 namespace DB::DM::tests
 {
 
-using IntervalType = int;
 using ValueType = int;
-using ITree = IntervalTree<IntervalType, ValueType>;
-using Interval = ITree::Interval;
-using Intervals = ITree::Intervals;
 
-TEST(IntervalTree_test, FindOverlap)
+using IntegerTree = IntervalTree<int, ValueType>;
+using IntegerInterval = IntegerTree::Interval;
+using IntegerIntervals = IntegerTree::Intervals;
+
+TEST(IntervalTree_test, FindOverlap_Integer)
 {
-    ITree tree;
+    IntegerTree tree;
     // [1, 10), [10, 20), [20, 30)
     tree.insert({1, 10});
     tree.insert({10, 20});
@@ -29,7 +29,7 @@ TEST(IntervalTree_test, FindOverlap)
         // Find overlap with [10, 20)
         auto overlaps = tree.findOverlappingIntervals({10, 20}, false);
         ASSERT_EQ(overlaps.size(), 1);
-        ASSERT_EQ(overlaps.front(), (Interval{10, 20}));
+        ASSERT_EQ(overlaps.front(), (IntegerInterval{10, 20}));
     }
 
     {
@@ -45,9 +45,9 @@ TEST(IntervalTree_test, FindOverlap)
     }
 }
 
-TEST(IntervalTree_test, Find)
+TEST(IntervalTree_test, Find_Integer)
 {
-    ITree tree;
+    IntegerTree tree;
     tree.insert({1, 10, 110});
     tree.insert({20, 30, 2030});
 
@@ -61,10 +61,11 @@ TEST(IntervalTree_test, Find)
     ASSERT_FALSE(v3.has_value());
 }
 
+template <typename T>
 class SequenceInterval
 {
 public:
-    bool insert(Interval interval)
+    bool insert(T interval)
     {
         if (!find(interval))
         {
@@ -74,15 +75,15 @@ public:
         return false;
     }
 
-    std::optional<ValueType> find(const Interval & interval) const
+    std::optional<ValueType> find(const T & interval) const
     {
         auto itr = std::find(intervals.cbegin(), intervals.cend(), interval);
         return itr != intervals.cend() ? std::make_optional<ValueType>(itr->value) : std::nullopt;
     }
 
-    Intervals findOverlappingIntervals(const Interval & interval, bool boundary) const
+    std::vector<T> findOverlappingIntervals(const T & interval, bool boundary) const
     {
-        Intervals out;
+        std::vector<T> out;
         std::copy_if(
             intervals.cbegin(),
             intervals.cend(),
@@ -93,7 +94,7 @@ public:
         return out;
     }
 
-    bool remove(const Interval & interval)
+    bool remove(const T & interval)
     {
         auto itr = std::find(intervals.cbegin(), intervals.cend(), interval);
         if (itr != intervals.cend())
@@ -107,16 +108,10 @@ public:
     size_t size() const { return intervals.size(); }
 
 private:
-    static bool rightOpenIntersecting(const Interval & a, const Interval & b)
-    {
-        return a.low < b.high && b.low < a.high;
-    }
-    static bool closedIntersecting(const Interval & a, const Interval & b)
-    {
-        return a.low <= b.high && b.low <= a.high;
-    }
+    static bool rightOpenIntersecting(const T & a, const T & b) { return a.low < b.high && b.low < a.high; }
+    static bool closedIntersecting(const T & a, const T & b) { return a.low <= b.high && b.low <= a.high; }
 
-    std::list<Interval> intervals;
+    std::list<T> intervals;
 };
 
 void setUpDisjointRanges(std::vector<std::tuple<int, int, int>> & ranges, int count)
@@ -146,7 +141,7 @@ void setUpSplitRanges(std::vector<std::tuple<int, int, int>> & ranges, int count
     }
 }
 
-TEST(IntervalTree_test, RandomTest)
+TEST(IntervalTree_test, RandomTest_Integer)
 {
     Stopwatch sw;
     constexpr auto min_ranges_count = 10000;
@@ -165,9 +160,9 @@ TEST(IntervalTree_test, RandomTest)
         }
     };
 
-    SequenceInterval seq;
+    SequenceInterval<IntegerInterval> seq;
     insert(seq);
-    ITree tree;
+    IntegerTree tree;
     insert(tree);
     ASSERT_EQ(tree.size(), seq.size());
     auto insert_seconds = sw.elapsedSecondsFromLastTime();
