@@ -129,7 +129,7 @@ void setUpDisjointRanges(std::vector<std::tuple<int, int, int>> & ranges, int co
     {
         int high = low + e() % range_max_step_length + 1;
         ranges.emplace_back(low, high, e());
-        low = high + 1;
+        low = high;
     }
 }
 
