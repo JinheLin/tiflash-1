@@ -18,7 +18,6 @@
 #include <cassert>
 #include <cstddef>
 #include <optional>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -31,69 +30,12 @@ struct Interval
     using interval_type = typename std::decay<IntervalType>::type;
     using value_type = typename std::decay<ValueType>::type;
 
-    template <
-        typename I,
-        typename V = ValueType,
-        typename = typename std::enable_if<std::is_scalar<typename std::decay<I>::type>::value>::type,
-        typename = typename std::enable_if<std::is_scalar<typename std::decay<V>::type>::value>::type>
-    Interval(I a, I b, V val = {})
-        : low(std::min(a, b))
-        , high(std::max(a, b))
-        , value(val)
-    {}
-
-    template <
-        typename I,
-        typename V = ValueType,
-        typename = typename std::enable_if<!std::is_scalar<typename std::decay<I>::type>::value>::type,
-        typename = typename std::enable_if<!std::is_scalar<typename std::decay<V>::type>::value>::type>
+    template <typename I, typename V = ValueType>
     Interval(I && a, I && b, V && val = {})
         : low(std::forward<I>(a < b ? a : b))
         , high(std::forward<I>(b < a ? a : b))
         , value(std::forward<V>(val))
     {}
-
-    template <
-        typename I,
-        typename V = ValueType,
-        typename = typename std::enable_if<!std::is_scalar<typename std::decay<I>::type>::value>::type,
-        typename = typename std::enable_if<std::is_scalar<typename std::decay<V>::type>::value>::type>
-    Interval(I && a, I && b, V val = {})
-        : low(std::forward<I>(a < b ? a : b))
-        , high(std::forward<I>(b < a ? a : b))
-        , value(val)
-    {}
-
-    template <
-        typename I,
-        typename V = ValueType,
-        typename = typename std::enable_if<std::is_scalar<typename std::decay<I>::type>::value>::type,
-        typename = typename std::enable_if<!std::is_scalar<typename std::decay<V>::type>::value>::type>
-    Interval(I a, I b, V && val = {})
-        : low(std::min(a, b))
-        , high(std::max(a, b))
-        , value(std::forward<V>(val))
-    {}
-
-    template <
-        typename V = ValueType,
-        typename = typename std::enable_if<std::is_scalar<typename std::decay<V>::type>::value>::type>
-    explicit Interval(const std::tuple<IntervalType, IntervalType> & interval, V val = {})
-        : Interval(std::get<0>(interval), std::get<1>(interval), val)
-    {}
-
-    template <
-        typename V = ValueType,
-        typename = typename std::enable_if<!std::is_scalar<typename std::decay<V>::type>::value>::type>
-    explicit Interval(const std::tuple<IntervalType, IntervalType> & interval, V && val = {})
-        : Interval(std::get<0>(interval), std::get<1>(interval), std::forward<V>(val))
-    {}
-
-    Interval(const Interval &) = default;
-    Interval(Interval &&) = default;
-    Interval & operator=(const Interval &) = default;
-    Interval & operator=(Interval &&) = default;
-    virtual ~Interval() = default;
 
     bool operator==(const Interval & other) const { return other.low == low && other.high == high; }
 
