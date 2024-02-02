@@ -30,11 +30,10 @@ struct Interval
     using interval_type = typename std::decay<IntervalType>::type;
     using value_type = typename std::decay<ValueType>::type;
 
-    template <typename I, typename V = ValueType>
-    Interval(I && a, I && b, V && val = {})
-        : low(std::forward<I>(a < b ? a : b))
-        , high(std::forward<I>(b < a ? a : b))
-        , value(std::forward<V>(val))
+    Interval(interval_type l, interval_type h, value_type v = {})
+        : low(std::move(l))
+        , high(std::move(h))
+        , value(std::move(v))
     {}
 
     bool operator==(const Interval & other) const { return other.low == low && other.high == high; }
@@ -46,7 +45,14 @@ struct Interval
     value_type value;
 };
 
-
+// `IntervalTree` is a red-black tree based data structure that use to index intervals.
+// Check `gtest_interval_tree.cpp` for its usage.
+// The main interfaces currently used are:
+// - insert
+// - remove
+// - find
+// - findOverlappingIntervals
+// If you want to use other interfaces, please add some unit-tests in `gtest_interval_tree.cpp` and update comments above.
 template <typename IntervalType, typename ValueType>
 class IntervalTree
 {
@@ -81,7 +87,7 @@ public:
         }
     }
 
-    virtual ~IntervalTree()
+    ~IntervalTree()
     {
         if (nullptr != m_root)
         {
