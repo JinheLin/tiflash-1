@@ -296,23 +296,6 @@ public:
         return false;
     }
 
-    bool contains(const Interval & interval) const
-    {
-        assert(nullptr != m_root && nullptr != m_nill);
-
-        if (m_root == m_nill)
-        {
-            // Tree is empty
-            assert(0 == m_size);
-            return false;
-        }
-
-        auto node = findNode(m_root, interval);
-        assert(node != m_nill);
-
-        return isNodeHasInterval(node, interval);
-    }
-
     std::optional<ValueType> find(const Interval & interval) const
     {
         assert(nullptr != m_root && nullptr != m_nill);
