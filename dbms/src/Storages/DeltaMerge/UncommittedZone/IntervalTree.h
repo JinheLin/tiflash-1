@@ -14,13 +14,14 @@
 
 #pragma once
 
+#include <Common/nocopyable.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <optional>
 #include <utility>
 #include <vector>
-#include <Common/nocopyable.h>
 namespace DB::DM
 {
 
@@ -47,12 +48,6 @@ struct Interval
 
 // `IntervalTree` is a red-black tree based data structure that use to index intervals.
 // Check `gtest_interval_tree.cpp` for its usage.
-// The main interfaces currently used are:
-// - insert
-// - remove
-// - find
-// - findOverlappingIntervals
-// If you want to use other interfaces, please add some unit-tests in `gtest_interval_tree.cpp` and update comments above.
 template <typename IntervalType, typename ValueType>
 class IntervalTree
 {
@@ -75,7 +70,7 @@ public:
     DISALLOW_COPY_AND_MOVE(IntervalTree);
 
     // Return true if insert successfully.
-    // Return false if `interval` already exist.
+    // Return false if `interval` already exists.
     bool insert(Interval interval)
     {
         if (m_root == m_nill)
@@ -102,6 +97,8 @@ public:
             return true;
         }
 
+        // node->intervals.front().low == interval.low
+
         if (!isNodeHasInterval(node, interval))
         {
             auto it = std::lower_bound(node->intervals.begin(), node->intervals.end(), interval, HighComparator());
@@ -127,6 +124,8 @@ public:
         return false;
     }
 
+    // Return true if remove successfully.
+    // Return false if `interval` not exists.
     bool remove(const Interval & interval)
     {
         if (m_root == m_nill)
@@ -233,6 +232,8 @@ public:
         return false;
     }
 
+    // Return value of `interval` if `interval` exists.
+    // Return std::nullopt if `interval` not exists.
     std::optional<ValueType> find(const Interval & interval) const
     {
         if (m_root == m_nill)
