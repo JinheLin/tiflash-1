@@ -74,6 +74,8 @@ public:
 
     DISALLOW_COPY_AND_MOVE(IntervalTree);
 
+    // Return true if insert successfully.
+    // Return false if `interval` already exist.
     bool insert(Interval interval)
     {
         if (m_root == m_nill)
@@ -261,36 +263,6 @@ public:
         if (m_root != m_nill)
         {
             subtreeOverlappingIntervals(m_root, interval, boundary, Appender{out});
-        }
-        return out;
-    }
-
-    Intervals findInnerIntervals(const Interval & interval, bool boundary) const
-    {
-        Intervals out;
-        if (m_root != m_nill)
-        {
-            subtreeInnerIntervals(m_root, interval, boundary, Appender{out});
-        }
-        return out;
-    }
-
-    Intervals findOuterIntervals(const Interval & interval, bool boundary) const
-    {
-        Intervals out;
-        if (m_root != m_nill)
-        {
-            subtreeOuterIntervals(m_root, interval, boundary, Appender{out});
-        }
-        return out;
-    }
-
-    void findIntervalsContainPoint(const IntervalType & point, bool boundary) const
-    {
-        Intervals out;
-        if (m_root != m_nill)
-        {
-            subtreeIntervalsContainPoint(m_root, point, boundary, Appender{out});
         }
         return out;
     }
