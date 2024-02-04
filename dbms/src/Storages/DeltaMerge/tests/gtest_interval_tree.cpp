@@ -17,7 +17,8 @@ using IntegerTree = IntervalTree<int, ValueType>;
 using IntegerInterval = IntegerTree::Interval;
 using IntegerIntervals = IntegerTree::Intervals;
 
-using RowKeyTree = IntervalTree<RowKeyValue, ValueType>;
+// Using `String` to represent row key.
+using RowKeyTree = IntervalTree<String, ValueType>;
 using RowKeyInterval = RowKeyTree::Interval;
 using RowKeyIntervals = RowKeyTree::Intervals;
 
@@ -49,42 +50,42 @@ TEST(IntervalTree_test, FindOverlap_Integer)
     }
 }
 
-/*
-RowKeyValue toRowKey(Int64 i)
+
+String toRowKeyString(Int64 i)
 {
-    return RowKeyValue::fromHandle(static_cast<Handle>(i));
+    WriteBufferFromOwnString ss;
+    DB::EncodeInt64(i, ss);
+    return ss.releaseStr();
 }
 
 TEST(IntervalTree_test, FindOverlap_RowKey)
 {
-    auto key = toRowKey(1);
-    [[maybe_unused]]auto key_ref = key.toRowKeyValueRef();
     RowKeyTree tree;
     
     // [1, 10), [10, 20), [20, 30)
-    tree.insert({toRowKey(1), toRowKey(10)});
-    tree.insert({toRowKey(10), toRowKey(20)});
-    tree.insert({toRowKey(20), toRowKey(30)});
+    tree.insert({toRowKeyString(1), toRowKeyString(10)});
+    tree.insert({toRowKeyString(10), toRowKeyString(20)});
+    tree.insert({toRowKeyString(20), toRowKeyString(30)});
 
     {
         // Find overlap with [10, 20)
-        auto overlaps = tree.findOverlappingIntervals({toRowKey(10), toRowKey(20)}, false);
+        auto overlaps = tree.findOverlappingIntervals({toRowKeyString(10), toRowKeyString(20)}, false);
         ASSERT_EQ(overlaps.size(), 1);
-        ASSERT_EQ(overlaps.front(), (RowKeyInterval{toRowKey(10), toRowKey(20)}));
+        ASSERT_EQ(overlaps.front(), (RowKeyInterval{toRowKeyString(10), toRowKeyString(20)}));
     }
 
     {
         // Find overlap with [10, 10)
-        auto overlaps = tree.findOverlappingIntervals({toRowKey(10), toRowKey(10)}, false);
+        auto overlaps = tree.findOverlappingIntervals({toRowKeyString(10), toRowKeyString(10)}, false);
         ASSERT_TRUE(overlaps.empty());
     }
 
     {
         // Find overlap with [30, 30)
-        auto overlaps = tree.findOverlappingIntervals({toRowKey(30), toRowKey(30)}, false);
+        auto overlaps = tree.findOverlappingIntervals({toRowKeyString(30), toRowKeyString(30)}, false);
         ASSERT_TRUE(overlaps.empty());
     }
-}*/
+}
 
 TEST(IntervalTree_test, Find_Integer)
 {
