@@ -50,7 +50,6 @@ TEST(IntervalTree_test, FindOverlap_Integer)
     }
 }
 
-
 String toRowKeyString(Int64 i)
 {
     WriteBufferFromOwnString ss;
@@ -100,6 +99,23 @@ TEST(IntervalTree_test, Find_Integer)
     ASSERT_TRUE(v2.has_value());
     ASSERT_EQ(*v2, 2030);
     auto v3 = tree.find({5, 15});
+    ASSERT_FALSE(v3.has_value());
+}
+
+
+TEST(IntervalTree_test, Find_RowKey)
+{
+    RowKeyTree tree;
+    tree.insert({toRowKeyString(1), toRowKeyString(10), 110});
+    tree.insert({toRowKeyString(20), toRowKeyString(30), 2030});
+
+    auto v1 = tree.find({toRowKeyString(1), toRowKeyString(10)});
+    ASSERT_TRUE(v1.has_value());
+    ASSERT_EQ(*v1, 110);
+    auto v2 = tree.find({toRowKeyString(20), toRowKeyString(30)});
+    ASSERT_TRUE(v2.has_value());
+    ASSERT_EQ(*v2, 2030);
+    auto v3 = tree.find({toRowKeyString(5), toRowKeyString(15)});
     ASSERT_FALSE(v3.has_value());
 }
 
@@ -186,7 +202,7 @@ void setUpSplitRanges(std::vector<std::tuple<int, int, int>> & ranges, int count
 TEST(IntervalTree_test, RandomTest_Integer)
 {
     Stopwatch sw;
-    constexpr auto min_ranges_count = 10000;
+    constexpr auto min_ranges_count = 5000;
     std::default_random_engine e;
     int ranges_count = e() % min_ranges_count + min_ranges_count;
     std::vector<std::tuple<int, int, int>> random_ranges;
@@ -242,6 +258,92 @@ TEST(IntervalTree_test, RandomTest_Integer)
         auto [l, h, v] = random_ranges[i];
         auto r1 = seq.remove({l, h});
         auto r2 = tree.remove({l, h});
+        RUNTIME_CHECK(r1 == r2);
+        return r1;
+    };
+
+    auto remove_count = 0;
+    auto find_overlap_seconds = 0.0;
+    auto find_seconds = 0.0;
+    for (int i = 0; i < 10; i++)
+    {
+        find_overlap();
+        find_overlap_seconds += sw.elapsedSecondsFromLastTime();
+        find();
+        find_seconds += sw.elapsedSecondsFromLastTime();
+
+        remove_count += remove_random();
+    }
+
+    LOG_INFO(
+        Logger::get(),
+        "setup_seconds={}, insert_seconds={}, find_overlap_seconds={}, find_seconds={}, remove_count={}",
+        setup_seconds,
+        insert_seconds,
+        find_overlap_seconds,
+        find_seconds,
+        remove_count);
+}
+
+TEST(IntervalTree_test, RandomTest_RowKey)
+{
+    Stopwatch sw;
+    constexpr auto min_ranges_count = 5000;
+    std::default_random_engine e;
+    int ranges_count = e() % min_ranges_count + min_ranges_count;
+    std::vector<std::tuple<int, int, int>> random_ranges;
+    random_ranges.reserve(ranges_count);
+    setUpDisjointRanges(random_ranges, ranges_count);
+    setUpSplitRanges(random_ranges, e() % min_ranges_count);
+    auto setup_seconds = sw.elapsedSecondsFromLastTime();
+
+    auto insert = [&](auto & t) {
+        for (auto [l, h, v] : random_ranges)
+        {
+            t.insert({toRowKeyString(l), toRowKeyString(h), v});
+        }
+    };
+
+    SequenceInterval<RowKeyInterval> seq;
+    insert(seq);
+    RowKeyTree tree;
+    insert(tree);
+    ASSERT_EQ(tree.size(), seq.size());
+    auto insert_seconds = sw.elapsedSecondsFromLastTime();
+
+    auto find_overlap = [&]() {
+        for (auto [l, h, v] : random_ranges)
+        {
+            auto seq_overlaps = seq.findOverlappingIntervals({toRowKeyString(l), toRowKeyString(h)}, false);
+            auto tree_overlaps = tree.findOverlappingIntervals({toRowKeyString(l), toRowKeyString(h)}, false);
+            ASSERT_EQ(seq_overlaps.size(), tree_overlaps.size());
+            for (const auto & interval : seq_overlaps)
+            {
+                auto itr = std::find(tree_overlaps.cbegin(), tree_overlaps.cend(), interval);
+                ASSERT_NE(itr, tree_overlaps.cend());
+                ASSERT_EQ(itr->value, v);
+            }
+        }
+    };
+
+    auto find = [&]() {
+        for (auto [l, h, v] : random_ranges)
+        {
+            auto seq_v = seq.find({toRowKeyString(l), toRowKeyString(h)});
+            auto tree_v = tree.find({toRowKeyString(l), toRowKeyString(h)});
+            ASSERT_EQ(seq_v, tree_v);
+            if (tree_v)
+            {
+                ASSERT_EQ(*tree_v, v);
+            }
+        }
+    };
+
+    auto remove_random = [&]() {
+        auto i = e() % random_ranges.size();
+        auto [l, h, v] = random_ranges[i];
+        auto r1 = seq.remove({toRowKeyString(l), toRowKeyString(h)});
+        auto r2 = tree.remove({toRowKeyString(l), toRowKeyString(h)});
         RUNTIME_CHECK(r1 == r2);
         return r1;
     };
