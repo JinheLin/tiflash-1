@@ -1,125 +1,107 @@
 #include <Common/Exception.h>
 #include <Common/Logger.h>
 #include <Common/Stopwatch.h>
+#include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/UncommittedZone/IntervalTree.h>
 #include <common/logger_useful.h>
 #include <gtest/gtest.h>
-#include <Storages/DeltaMerge/RowKeyRange.h>
+
 #include <list>
 #include <random>
 
 namespace DB::DM::tests
 {
-
-using ValueType = int;
-
-using IntegerTree = IntervalTree<int, ValueType>;
-using IntegerInterval = IntegerTree::Interval;
-using IntegerIntervals = IntegerTree::Intervals;
-
-// Using `String` to represent row key.
-using RowKeyTree = IntervalTree<String, ValueType>;
-using RowKeyInterval = RowKeyTree::Interval;
-using RowKeyIntervals = RowKeyTree::Intervals;
-
-TEST(IntervalTree_test, FindOverlap_Integer)
+template <typename IntervalType, typename ValueType, typename ToValue, typename ToIntervalType>
+void testSimple(ToValue to_value, ToIntervalType to_interval_type)
 {
-    IntegerTree tree;
-    // [1, 10), [10, 20), [20, 30)
-    tree.insert({1, 10});
-    tree.insert({10, 20});
-    tree.insert({20, 30});
+    IntervalTree<IntervalType, ValueType> tree;
+    {
+        auto v = to_value(1, 10);
+        tree.insert({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v)), v});
+    }
+    {
+        auto v = to_value(10, 20);
+        tree.insert({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v)), v});
+    }
+    {
+        auto v = to_value(20, 30);
+        tree.insert({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v)), v});
+    }
+
+    {
+        auto v = to_value(1, 10);
+        auto r = tree.find({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))});
+        ASSERT_TRUE(r.has_value());
+        ASSERT_EQ(*r, v);
+    }
+    {
+        auto v = to_value(20, 30);
+        auto r = tree.find({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))});
+        ASSERT_TRUE(r.has_value());
+        ASSERT_EQ(*r, v);
+    }
+    {
+        auto v = to_value(5, 15);
+        auto r = tree.find({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))});
+        ASSERT_FALSE(r.has_value());
+    }
 
     {
         // Find overlap with [10, 20)
-        auto overlaps = tree.findOverlappingIntervals({10, 20}, false);
+        auto v = to_value(10, 20);
+        auto overlaps = tree.findOverlappingIntervals(
+            {to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))},
+            false);
         ASSERT_EQ(overlaps.size(), 1);
-        ASSERT_EQ(overlaps.front(), (IntegerInterval{10, 20}));
+        ASSERT_EQ(overlaps.front().value, v);
     }
-
     {
         // Find overlap with [10, 10)
-        auto overlaps = tree.findOverlappingIntervals({10, 10}, false);
+        auto v = to_value(10, 10);
+        auto overlaps = tree.findOverlappingIntervals(
+            {to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))},
+            false);
         ASSERT_TRUE(overlaps.empty());
     }
-
     {
         // Find overlap with [30, 30)
-        auto overlaps = tree.findOverlappingIntervals({30, 30}, false);
+        auto v = to_value(30, 30);
+        auto overlaps = tree.findOverlappingIntervals(
+            {to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))},
+            false);
         ASSERT_TRUE(overlaps.empty());
     }
 }
 
-String toRowKeyString(Int64 i)
+TEST(IntervalTree_test, Simple)
 {
-    WriteBufferFromOwnString ss;
-    DB::EncodeInt64(i, ss);
-    return ss.releaseStr();
-}
-
-TEST(IntervalTree_test, FindOverlap_RowKey)
-{
-    RowKeyTree tree;
-    
-    // [1, 10), [10, 20), [20, 30)
-    tree.insert({toRowKeyString(1), toRowKeyString(10)});
-    tree.insert({toRowKeyString(10), toRowKeyString(20)});
-    tree.insert({toRowKeyString(20), toRowKeyString(30)});
-
     {
-        // Find overlap with [10, 20)
-        auto overlaps = tree.findOverlappingIntervals({toRowKeyString(10), toRowKeyString(20)}, false);
-        ASSERT_EQ(overlaps.size(), 1);
-        ASSERT_EQ(overlaps.front(), (RowKeyInterval{toRowKeyString(10), toRowKeyString(20)}));
+        auto to_value = [](int i, int j) {
+            return std::make_tuple(i, j);
+        };
+        auto to_interval_type = [](int i) {
+            return i;
+        };
+        testSimple<int, std::tuple<int, int>>(to_value, to_interval_type);
     }
 
     {
-        // Find overlap with [10, 10)
-        auto overlaps = tree.findOverlappingIntervals({toRowKeyString(10), toRowKeyString(10)}, false);
-        ASSERT_TRUE(overlaps.empty());
+        auto to_row_key_value = [](int i) {
+            WriteBufferFromOwnString ss;
+            DB::EncodeInt64(i, ss);
+            return RowKeyValue(false, std::make_shared<String>(ss.releaseStr()), i);
+        };
+        auto to_value = [&](int i, int j) {
+            return std::make_tuple(to_row_key_value(i), to_row_key_value(j));
+        };
+        auto to_interval_type = [](const RowKeyValue & key) {
+            return std::string_view(*(key.value));
+        };
+        testSimple<std::string_view, std::tuple<RowKeyValue, RowKeyValue>>(to_value, to_interval_type);
     }
-
-    {
-        // Find overlap with [30, 30)
-        auto overlaps = tree.findOverlappingIntervals({toRowKeyString(30), toRowKeyString(30)}, false);
-        ASSERT_TRUE(overlaps.empty());
-    }
 }
 
-TEST(IntervalTree_test, Find_Integer)
-{
-    IntegerTree tree;
-    tree.insert({1, 10, 110});
-    tree.insert({20, 30, 2030});
-
-    auto v1 = tree.find({1, 10});
-    ASSERT_TRUE(v1.has_value());
-    ASSERT_EQ(*v1, 110);
-    auto v2 = tree.find({20, 30});
-    ASSERT_TRUE(v2.has_value());
-    ASSERT_EQ(*v2, 2030);
-    auto v3 = tree.find({5, 15});
-    ASSERT_FALSE(v3.has_value());
-}
-
-
-TEST(IntervalTree_test, Find_RowKey)
-{
-    RowKeyTree tree;
-    tree.insert({toRowKeyString(1), toRowKeyString(10), 110});
-    tree.insert({toRowKeyString(20), toRowKeyString(30), 2030});
-
-    auto v1 = tree.find({toRowKeyString(1), toRowKeyString(10)});
-    ASSERT_TRUE(v1.has_value());
-    ASSERT_EQ(*v1, 110);
-    auto v2 = tree.find({toRowKeyString(20), toRowKeyString(30)});
-    ASSERT_TRUE(v2.has_value());
-    ASSERT_EQ(*v2, 2030);
-    auto v3 = tree.find({toRowKeyString(5), toRowKeyString(15)});
-    ASSERT_FALSE(v3.has_value());
-}
-
-template <typename T>
+template <typename T, typename ValueType>
 class SequenceInterval
 {
 public:
@@ -172,7 +154,7 @@ private:
     std::list<T> intervals;
 };
 
-void setUpDisjointRanges(std::vector<std::tuple<int, int, int>> & ranges, int count)
+void setUpDisjointRanges(std::vector<std::tuple<int, int>> & ranges, int count)
 {
     constexpr auto range_max_step_length = 10000;
     ranges.reserve(count);
@@ -181,70 +163,78 @@ void setUpDisjointRanges(std::vector<std::tuple<int, int, int>> & ranges, int co
     for (int i = 0; i < count; i++)
     {
         int high = low + e() % range_max_step_length + 1;
-        ranges.emplace_back(low, high, e());
+        ranges.emplace_back(low, high);
         low = high;
     }
 }
 
-void setUpSplitRanges(std::vector<std::tuple<int, int, int>> & ranges, int count)
+void setUpSplitRanges(std::vector<std::tuple<int, int>> & ranges, int count)
 {
     std::default_random_engine e;
     for (int i = 0; i < count; i++)
     {
         auto t = e() % ranges.size();
-        auto [low, high, value] = ranges[t];
+        auto [low, high] = ranges[t];
         auto mid = (low + high) / 2;
-        ranges.emplace_back(low, high, value);
-        ranges.emplace_back(mid, high, value);
+        ranges.emplace_back(low, high);
+        ranges.emplace_back(mid, high);
     }
 }
 
-TEST(IntervalTree_test, RandomTest_Integer)
+template <typename IntervalType, typename ValueType, typename ToValue, typename ToIntervalType>
+void testRandom(ToValue to_value, ToIntervalType to_interval_type)
 {
     Stopwatch sw;
     constexpr auto min_ranges_count = 5000;
     std::default_random_engine e;
     int ranges_count = e() % min_ranges_count + min_ranges_count;
-    std::vector<std::tuple<int, int, int>> random_ranges;
+    std::vector<std::tuple<int, int>> random_ranges;
     random_ranges.reserve(ranges_count);
     setUpDisjointRanges(random_ranges, ranges_count);
     setUpSplitRanges(random_ranges, e() % min_ranges_count);
     auto setup_seconds = sw.elapsedSecondsFromLastTime();
 
     auto insert = [&](auto & t) {
-        for (auto [l, h, v] : random_ranges)
+        for (auto [l, h] : random_ranges)
         {
-            t.insert({l, h, v});
+            auto v = to_value(l, h);
+            t.insert({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v)), v});
         }
     };
 
-    SequenceInterval<IntegerInterval> seq;
+    IntervalTree<IntervalType, ValueType> tree;
+    SequenceInterval<typename IntervalTree<IntervalType, ValueType>::Interval, ValueType> seq;
     insert(seq);
-    IntegerTree tree;
     insert(tree);
     ASSERT_EQ(tree.size(), seq.size());
     auto insert_seconds = sw.elapsedSecondsFromLastTime();
 
     auto find_overlap = [&]() {
-        for (auto [l, h, v] : random_ranges)
+        for (auto [l, h] : random_ranges)
         {
-            auto seq_overlaps = seq.findOverlappingIntervals({l, h}, false);
-            auto tree_overlaps = tree.findOverlappingIntervals({l, h}, false);
+            auto v = to_value(l, h);
+            auto seq_overlaps = seq.findOverlappingIntervals(
+                {to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))},
+                false);
+            auto tree_overlaps = tree.findOverlappingIntervals(
+                {to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))},
+                false);
             ASSERT_EQ(seq_overlaps.size(), tree_overlaps.size());
             for (const auto & interval : seq_overlaps)
             {
                 auto itr = std::find(tree_overlaps.cbegin(), tree_overlaps.cend(), interval);
                 ASSERT_NE(itr, tree_overlaps.cend());
-                ASSERT_EQ(itr->value, v);
+                ASSERT_EQ(itr->value, interval.value);
             }
         }
     };
 
     auto find = [&]() {
-        for (auto [l, h, v] : random_ranges)
+        for (auto [l, h] : random_ranges)
         {
-            auto seq_v = seq.find({l, h});
-            auto tree_v = tree.find({l, h});
+            auto v = to_value(l, h);
+            auto seq_v = seq.find({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))});
+            auto tree_v = tree.find({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))});
             ASSERT_EQ(seq_v, tree_v);
             if (tree_v)
             {
@@ -255,9 +245,10 @@ TEST(IntervalTree_test, RandomTest_Integer)
 
     auto remove_random = [&]() {
         auto i = e() % random_ranges.size();
-        auto [l, h, v] = random_ranges[i];
-        auto r1 = seq.remove({l, h});
-        auto r2 = tree.remove({l, h});
+        auto [l, h] = random_ranges[i];
+        auto v = to_value(l, h);
+        auto r1 = seq.remove({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))});
+        auto r2 = tree.remove({to_interval_type(std::get<0>(v)), to_interval_type(std::get<1>(v))});
         RUNTIME_CHECK(r1 == r2);
         return r1;
     };
@@ -285,90 +276,32 @@ TEST(IntervalTree_test, RandomTest_Integer)
         remove_count);
 }
 
-TEST(IntervalTree_test, RandomTest_RowKey)
+TEST(IntervalTree_test, Random)
 {
-    Stopwatch sw;
-    constexpr auto min_ranges_count = 5000;
-    std::default_random_engine e;
-    int ranges_count = e() % min_ranges_count + min_ranges_count;
-    std::vector<std::tuple<int, int, int>> random_ranges;
-    random_ranges.reserve(ranges_count);
-    setUpDisjointRanges(random_ranges, ranges_count);
-    setUpSplitRanges(random_ranges, e() % min_ranges_count);
-    auto setup_seconds = sw.elapsedSecondsFromLastTime();
-
-    auto insert = [&](auto & t) {
-        for (auto [l, h, v] : random_ranges)
-        {
-            t.insert({toRowKeyString(l), toRowKeyString(h), v});
-        }
-    };
-
-    SequenceInterval<RowKeyInterval> seq;
-    insert(seq);
-    RowKeyTree tree;
-    insert(tree);
-    ASSERT_EQ(tree.size(), seq.size());
-    auto insert_seconds = sw.elapsedSecondsFromLastTime();
-
-    auto find_overlap = [&]() {
-        for (auto [l, h, v] : random_ranges)
-        {
-            auto seq_overlaps = seq.findOverlappingIntervals({toRowKeyString(l), toRowKeyString(h)}, false);
-            auto tree_overlaps = tree.findOverlappingIntervals({toRowKeyString(l), toRowKeyString(h)}, false);
-            ASSERT_EQ(seq_overlaps.size(), tree_overlaps.size());
-            for (const auto & interval : seq_overlaps)
-            {
-                auto itr = std::find(tree_overlaps.cbegin(), tree_overlaps.cend(), interval);
-                ASSERT_NE(itr, tree_overlaps.cend());
-                ASSERT_EQ(itr->value, v);
-            }
-        }
-    };
-
-    auto find = [&]() {
-        for (auto [l, h, v] : random_ranges)
-        {
-            auto seq_v = seq.find({toRowKeyString(l), toRowKeyString(h)});
-            auto tree_v = tree.find({toRowKeyString(l), toRowKeyString(h)});
-            ASSERT_EQ(seq_v, tree_v);
-            if (tree_v)
-            {
-                ASSERT_EQ(*tree_v, v);
-            }
-        }
-    };
-
-    auto remove_random = [&]() {
-        auto i = e() % random_ranges.size();
-        auto [l, h, v] = random_ranges[i];
-        auto r1 = seq.remove({toRowKeyString(l), toRowKeyString(h)});
-        auto r2 = tree.remove({toRowKeyString(l), toRowKeyString(h)});
-        RUNTIME_CHECK(r1 == r2);
-        return r1;
-    };
-
-    auto remove_count = 0;
-    auto find_overlap_seconds = 0.0;
-    auto find_seconds = 0.0;
-    for (int i = 0; i < 10; i++)
     {
-        find_overlap();
-        find_overlap_seconds += sw.elapsedSecondsFromLastTime();
-        find();
-        find_seconds += sw.elapsedSecondsFromLastTime();
-
-        remove_count += remove_random();
+        auto to_value = [](int i, int j) {
+            return std::make_tuple(i, j);
+        };
+        auto to_interval_type = [](int i) {
+            return i;
+        };
+        testRandom<int, std::tuple<int, int>>(to_value, to_interval_type);
     }
 
-    LOG_INFO(
-        Logger::get(),
-        "setup_seconds={}, insert_seconds={}, find_overlap_seconds={}, find_seconds={}, remove_count={}",
-        setup_seconds,
-        insert_seconds,
-        find_overlap_seconds,
-        find_seconds,
-        remove_count);
+    {
+        auto to_row_key_value = [](int i) {
+            WriteBufferFromOwnString ss;
+            DB::EncodeInt64(i, ss);
+            return RowKeyValue(false, std::make_shared<String>(ss.releaseStr()), i);
+        };
+        auto to_value = [&](int i, int j) {
+            return std::make_tuple(to_row_key_value(i), to_row_key_value(j));
+        };
+        auto to_interval_type = [](const RowKeyValue & key) {
+            return std::string_view(*(key.value));
+        };
+        testRandom<std::string_view, std::tuple<RowKeyValue, RowKeyValue>>(to_value, to_interval_type);
+    }
 }
 
 } // namespace DB::DM::tests
