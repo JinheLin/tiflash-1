@@ -17,14 +17,14 @@ public:
     // Use for restore.
     explicit UncommittedRange(UInt64 range_id_);
     // Use for create.
-    UncommittedRange(UInt64 range_id_, const RowKeyRange & range_, UInt64 start_ts, const UncommittedFilePtr & file);
-    void insert(UInt64 start_ts, const UncommittedFilePtr & file);
-
+    UncommittedRange(UInt64 range_id_, const RowKeyRange & range_, const UncommittedFilePtr & file);
+    void addFile(const UncommittedFilePtr & file);
+    const RowKeyRange & getRange() const;
 private:
     std::mutex mtx;
-    const UInt64 range_id;
-    UInt64 next_range_id = 0;
-    RowKeyRange range;
+    [[maybe_unused]]const UInt64 range_id;
+    [[maybe_unused]]UInt64 next_range_id = 0;
+    [[maybe_unused]]RowKeyRange range;
     std::unordered_map<UInt64, UncommittedFiles> files;
 };
 

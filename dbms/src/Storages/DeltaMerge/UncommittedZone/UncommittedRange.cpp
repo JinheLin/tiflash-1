@@ -1,17 +1,14 @@
-#pragma once
-
 #include <Storages/DeltaMerge/UncommittedZone/UncommittedRange.h>
 
 namespace DB::DM
 {
 
-UncommittedRangePtr UncommittedRange::create(UInt64 range_id, const RowKeyRange & range, const UncommittedFilePtr & file)
+UncommittedRangePtr UncommittedRange::create([[maybe_unused]]UInt64 range_id, [[maybe_unused]] const RowKeyRange & range, [[maybe_unused]]const UncommittedFilePtr & file)
 {
-    // TODO
-    return nullptr;
+    return std::make_shared<UncommittedRange>(range_id, range, file);
 }
 
-UncommittedRangePtr UncommittedRange::restore(UInt64 range_id)
+UncommittedRangePtr UncommittedRange::restore([[maybe_unused]]UInt64 range_id)
 {
     // TODO
     return nullptr;
@@ -23,17 +20,21 @@ UncommittedRange::UncommittedRange(UInt64 range_id_)
     // TODO
 }
 
-
-UncommittedRange::UncommittedRange(UInt64 range_id_, const RowKeyRange & range_, UInt64 start_ts, const UncommittedFilePtr & file)
+UncommittedRange::UncommittedRange(UInt64 range_id_, const RowKeyRange & range_, const UncommittedFilePtr & file)
     : range_id(range_id_)
     , range(range_)
 {
-    files[start_ts].push_back(file);
+    files[file->getStartTS()].push_back(file);
 }
 
-void UncommittedRange::insert(UInt64 start_ts, const UncommittedFilePtr & file)
+void UncommittedRange::addFile(const UncommittedFilePtr & file)
 {
-    // TODO
+    files[file->getStartTS()].push_back(file);
+}
+
+const RowKeyRange & UncommittedRange::getRange() const
+{
+    return range;
 }
 
 } // namespace DB::DM
