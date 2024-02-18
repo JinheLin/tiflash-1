@@ -51,6 +51,9 @@ void UncommittedFile::deleteRange(const RowKeyRange & delete_range)
 void UncommittedFile::commit(const RowKeyRange & /*commit_range*/, UInt64 /*commit_ts*/)
 {
     // TODO
+    // Generate commit_ts column file.
+    // Ingest with range.
+    // Calcute new valid ranges.
 }
 
 } // namespace DB::DM
