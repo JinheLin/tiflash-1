@@ -14,4 +14,13 @@
 
 syntax = "proto3";
 
-package uzpb;
+package uncommitted_zone;
+
+message UncommittedFile
+{
+    uint64 start_ts = 1;
+    uint64 generation = 2;
+    string parent_path = 3;
+    uint64 file_id = 4;
+    repeated bytes valid_ranges = 5;
+}

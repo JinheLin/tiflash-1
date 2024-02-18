@@ -3,9 +3,14 @@
 namespace DB::DM
 {
 
-void UncommittedZone::ingest(const RowKeyRange & range, UInt64 start_ts, UInt64 generation, const String & parent_path, PageIdU64 file_id)
+void UncommittedZone::ingest(
+    const RowKeyRange & range,
+    UInt64 start_ts,
+    UInt64 generation,
+    const String & parent_path,
+    PageIdU64 file_id)
 {
-    auto uncommitted_file = UncommittedFile::create(range, start_ts, generation, parent_path, file_id);
+    auto uncommitted_file = UncommittedFile::create(start_ts, generation, parent_path, file_id, {range});
 
     auto opt_uncommitted_range = ranges.find(rowKeyRangeToInterval(range));
     if (opt_uncommitted_range)
@@ -18,10 +23,7 @@ void UncommittedZone::ingest(const RowKeyRange & range, UInt64 start_ts, UInt64 
         UInt64 range_id = 0;
         auto uncommitted_range = UncommittedRange::create(range_id, range, uncommitted_file);
         const auto & range = uncommitted_range->getRange();
-        ranges.insert({
-            *(range.start.value), 
-            *(range.end.value), 
-            uncommitted_range});
+        ranges.insert({*(range.start.value), *(range.end.value), uncommitted_range});
         // TODO: Flush uncommitted_range
         // TODO: Update and flush prev uncommitted_range
     }
