@@ -1761,28 +1761,21 @@ DM::GlobalStoragePoolPtr Context::getGlobalStoragePool() const
 void Context::initializeWriteNodePageStorageIfNeed(const PathPool & path_pool)
 {
     auto lock = getLock();
-    if (shared->storage_run_mode == PageStorageRunMode::UNI_PS)
+    RUNTIME_CHECK(shared->ps_write == nullptr);
+    try
     {
-        RUNTIME_CHECK(shared->ps_write == nullptr);
-        try
-        {
-            PageStorageConfig config;
-            shared->ps_write = UniversalPageStorageService::create( //
-                *this,
-                "uni_write",
-                path_pool.getPSDiskDelegatorGlobalMulti(PathPool::write_uni_path_prefix),
-                config);
-            LOG_INFO(shared->log, "initialized GlobalUniversalPageStorage(WriteNode)");
-        }
-        catch (...)
-        {
-            tryLogCurrentException(__PRETTY_FUNCTION__);
-            throw;
-        }
+        PageStorageConfig config;
+        shared->ps_write = UniversalPageStorageService::create( //
+            *this,
+            "uni_write",
+            path_pool.getPSDiskDelegatorGlobalMulti(PathPool::write_uni_path_prefix),
+            config);
+        LOG_INFO(shared->log, "initialized GlobalUniversalPageStorage(WriteNode)");
     }
-    else
+    catch (...)
     {
-        shared->ps_write = nullptr;
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+        throw;
     }
 }
 
