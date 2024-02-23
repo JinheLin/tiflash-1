@@ -79,7 +79,7 @@ StoragePool::StoragePool(
     , keyspace_id(keyspace_id_)
     , table_id(table_id_)
     , storage_path_pool(storage_path_pool_)
-    , uni_ps(run_mode == PageStorageRunMode::UNI_PS ? global_ctx.getWriteNodePageStorage() : nullptr)
+    , uni_ps(global_ctx.getWriteNodePageStorage())
     , global_context(global_ctx)
     , global_id_allocator(std::move(page_id_allocator_))
     , storage_pool_metrics(CurrentMetrics::StoragePoolV3Only, 0)
@@ -363,6 +363,26 @@ StoragePool::StoragePool(
     }
     default:
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unknown PageStorageRunMode {}", static_cast<UInt8>(run_mode));
+    }
+
+    if (uni_ps != nullptr)
+    {
+        meta_unips_reader = std::make_shared<PageReader>(
+            PageStorageRunMode::UNI_PS,
+            keyspace_id,
+            StorageType::Meta,
+            table_id,
+            /*storage_v2_*/ nullptr,
+            /*storage_v3_*/ nullptr,
+            uni_ps,
+            nullptr);
+
+        meta_unips_writer = std::make_shared<PageWriter>(
+            PageStorageRunMode::UNI_PS,
+            StorageType::Meta,
+            /*storage_v2_*/ nullptr,
+            /*storage_v3_*/ nullptr,
+            uni_ps);
     }
 }
 

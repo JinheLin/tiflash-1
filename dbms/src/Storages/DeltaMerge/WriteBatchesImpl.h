@@ -31,6 +31,7 @@ struct WriteBatches : private boost::noncopyable
     WriteBatchWrapper log;
     WriteBatchWrapper data;
     WriteBatchWrapper meta;
+    WriteBatchWrapper unips_meta;
 
     PageIdU64s written_log;
     PageIdU64s written_data;
@@ -51,6 +52,7 @@ struct WriteBatches : private boost::noncopyable
         , log(run_mode, keyspace_id, StorageType::Log, ns_id)
         , data(run_mode, keyspace_id, StorageType::Data, ns_id)
         , meta(run_mode, keyspace_id, StorageType::Meta, ns_id)
+        , unips_meta(PageStorageRunMode::UNI_PS, keyspace_id, StorageType::Meta, ns_id)
         , removed_log(run_mode, keyspace_id, StorageType::Log, ns_id)
         , removed_data(run_mode, keyspace_id, StorageType::Data, ns_id)
         , removed_meta(run_mode, keyspace_id, StorageType::Meta, ns_id)
@@ -77,6 +79,7 @@ struct WriteBatches : private boost::noncopyable
             check_empty(log, "log");
             check_empty(data, "data");
             check_empty(meta, "meta");
+            check_empty(unips_meta, "unips_meta");
             check_empty(removed_log, "removed_log");
             check_empty(removed_data, "removed_data");
             check_empty(removed_meta, "removed_meta");
@@ -231,6 +234,11 @@ struct WriteBatches : private boost::noncopyable
 
         storage_pool.metaWriter()->write(std::move(meta), write_limiter);
         meta.clear();
+    }
+
+    void writeUniPSMeta()
+    {
+        storage_pool.
     }
 
     void writeRemoves()

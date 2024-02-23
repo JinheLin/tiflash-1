@@ -112,6 +112,18 @@ public:
         return meta_storage_writer;
     }
 
+    PageReaderPtr & metaUniPSReader()
+    {
+        assert(meta_unips_reader);
+        return meta_unips_reader;
+    }
+
+    PageWriterPtr & metaUniPSWriter()
+    {
+        assert(meta_unips_writer);
+        return meta_unips_writer;
+    }
+
 
     PageReaderPtr newLogReader(ReadLimiterPtr read_limiter, bool snapshot_read, const String & tracing_id);
     PageReaderPtr newLogReader(ReadLimiterPtr read_limiter, PageStorageSnapshotPtr & snapshot);
@@ -180,6 +192,9 @@ private:
     PageWriterPtr log_storage_writer;
     PageWriterPtr data_storage_writer;
     PageWriterPtr meta_storage_writer;
+
+    PageReaderPtr meta_unips_reader;
+    PageWriterPtr meta_unips_writer;
 
     std::atomic<Timepoint> last_try_gc_time = Clock::now();
 
