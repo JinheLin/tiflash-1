@@ -172,7 +172,7 @@ Block DMFileReader::readWithFilter(const IColumn::Filter & filter)
         return {};
     }
 
-    /// 2. Mark use_packs[i] = false if all rows in the i-th pack are filtered out by filter.
+    /// 2. Mark pack_res[i] = None if all rows in the i-th pack are filtered out by filter.
 
     const auto & pack_stats = dmfile->getPackStats();
     auto & pack_res = pack_filter.getPackRes();
@@ -221,11 +221,11 @@ Block DMFileReader::readWithFilter(const IColumn::Filter & filter)
     {
         // When the next pack is not used or the pack is the last pack, call read() to read theses packs and filter them
         // For example:
-        //  When next_pack_id_cp = use_packs.size() and use_packs[next_pack_id:next_pack_id_cp] = [true, true, false, true, true, true]
+        //  When next_pack_id_cp = pack_res.size() and pack_res[next_pack_id:next_pack_id_cp] = [true, true, false, true, true, true]
         //  The algorithm runs as follows:
         //      When i = next_pack_id + 2, call read() to read {next_pack_id, next_pack_id + 1}th packs
         //      When i = next_pack_id + 5, call read() to read {next_pack_id + 3, next_pack_id + 4, next_pack_id + 5}th packs
-        if (use_packs[pack_id] && (pack_id + 1 == use_packs.size() || !use_packs[pack_id + 1]))
+        if (pack_res[pack_id] != RSResult::None && (pack_id + 1 == pack_res.size() || pack_res[pack_id + 1] == RSResult::None))
         {
             Block block = read();
             size_t rows = block.rows();
@@ -256,16 +256,16 @@ Block DMFileReader::readWithFilter(const IColumn::Filter & filter)
             }
             offset += rows;
         }
-        else if (!use_packs[pack_id])
+        else if (pack_res[pack_id] == RSResult::None)
         {
             offset += pack_stats[pack_id].rows;
         }
     }
 
-    /// 5. Restore the use_packs[last_pack_id]
+    /// 5. Restore the pack_res[last_pack_id]
 
-    if (last_pack_id < use_packs.size())
-        use_packs[last_pack_id] = next_pack_id_use_packs_cp;
+    if (last_pack_id < pack_res.size())
+        pack_res[last_pack_id] = next_pack_id_pack_res_cp;
 
     Block res = getHeader().cloneWithColumns(std::move(columns));
     res.setStartOffset(start_row_offset);

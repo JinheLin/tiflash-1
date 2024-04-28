@@ -49,14 +49,9 @@ void DMFilePackFilter::init()
 
     ProfileEvents::increment(ProfileEvents::DMFileFilterNoFilter, pack_count);
 
-    auto count_packs = [](const RSResults & packs) {
-        return std::accumulate(packs.cbegin(), packs.cend(), 0, [](int acc, RSResult res) {
-            return acc + (res != RSResult::None);
-        });
-    };
     /// Check packs by handle_res
     pack_res = handle_res;
-    auto after_pk = count_packs(pack_res);
+    auto after_pk = countUsefulPack();
 
     /// Check packs by read_packs
     if (read_packs)
@@ -66,7 +61,7 @@ void DMFilePackFilter::init()
             pack_res[i] = pack_res[i] && (read_packs->contains(i) ? RSResult::Some : RSResult::None);
         }
     }
-    auto after_read_packs = count_packs(pack_res);
+    auto after_read_packs = countUsefulPack();
     ProfileEvents::increment(ProfileEvents::DMFileFilterAftPKAndPackSet, after_read_packs);
 
     /// Check packs by filter in where clause
@@ -87,7 +82,7 @@ void DMFilePackFilter::init()
             pack_res.begin(),
             [](RSResult a, RSResult b) { return a && b; });
     }
-    auto after_filter = count_packs(pack_res);
+    auto after_filter = countUsefulPack();
     ProfileEvents::increment(ProfileEvents::DMFileFilterAftRoughSet, after_filter);
 
     Float64 filter_rate = 0.0;
@@ -107,6 +102,11 @@ void DMFilePackFilter::init()
         toDebugString(rowkey_ranges),
         ((read_packs == nullptr) ? 0 : read_packs->size()),
         pack_count);
+}
+
+size_t DMFilePackFilter::countUsefulPack() const
+{
+    return std::count_if(pack_res.cbegin(), pack_res.cend(), [](RSResult res) { return isUseful(res); });
 }
 
 void DMFilePackFilter::loadIndex(
