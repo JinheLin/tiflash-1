@@ -251,7 +251,7 @@ bool placeInsert(
     Rids rids(limit);
     for (size_t i = 0; i < limit; ++i)
         rids[i] = rid_gen.nextForUpsert();
-
+    std::cout << fmt::format("placeInsert: {}\n", rids);
     for (size_t i = 0; i < limit; ++i)
     {
         auto [rid, dup] = rids[i];
@@ -262,8 +262,12 @@ bool placeInsert(
             tuple_id = delta_value_space_offset + (offset + i);
 
         if (dup)
+        {
             delta_tree.addDelete(rid);
+            delta_tree.setDup();
+        }
         delta_tree.addInsert(rid, tuple_id);
+        std::cout << fmt::format("rid={}, tuple_id={}\n", rid, tuple_id);
     }
 
     return rows == limit;

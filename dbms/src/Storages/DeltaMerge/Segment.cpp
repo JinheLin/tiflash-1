@@ -2565,7 +2565,6 @@ std::pair<DeltaIndexPtr, bool> Segment::ensurePlace(
     auto delta_snap = delta_reader->getDeltaSnap();
     // Clone a new delta index.
     auto my_delta_index = delta_snap->getSharedDeltaIndex()->tryClone(delta_snap->getRows(), delta_snap->getDeletes());
-    auto my_delta_tree = my_delta_index->getDeltaTree();
 
     const bool relevant_place = dm_context.enable_relevant_place;
     const bool skippable_place = dm_context.enable_skippable_place;
@@ -2575,8 +2574,6 @@ std::pair<DeltaIndexPtr, bool> Segment::ensurePlace(
     // If we use the range of this segment as relevant_range, fully_indexed will always be false in those cases.
     RowKeyRange relevant_range = relevant_place ? mergeRanges(read_ranges, is_common_handle, rowkey_column_size)
                                                 : RowKeyRange::newAll(is_common_handle, rowkey_column_size);
-
-    auto [my_placed_rows, my_placed_deletes] = my_delta_index->getPlacedStatus();
 
     // Let's do a fast check, determine whether we need to do place or not.
     if (!delta_reader->shouldPlace(dm_context, my_delta_index, rowkey_range, relevant_range, start_ts))
@@ -2593,6 +2590,9 @@ std::pair<DeltaIndexPtr, bool> Segment::ensurePlace(
 
     EventRecorder recorder(ProfileEvents::DMPlace, ProfileEvents::DMPlaceNS);
 
+    auto [my_placed_rows, my_placed_deletes] = my_delta_index->getPlacedStatus();
+    auto my_delta_tree = my_delta_index->getDeltaTree();
+    std::cout << fmt::format("my_placed_rows={}, my_placed_deletes={}\n", my_placed_rows, my_placed_deletes);
     auto items = delta_reader->getPlaceItems(
         my_placed_rows,
         my_placed_deletes,
