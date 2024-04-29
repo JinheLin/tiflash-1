@@ -19,7 +19,9 @@
 #include <Storages/DeltaMerge/RowKeyFilter.h>
 #include <Storages/DeltaMerge/StoragePool/StoragePool.h>
 #include <Storages/DeltaMerge/convertColumnTypeHelpers.h>
+
 #include <memory>
+
 #include "Storages/DeltaMerge/DeltaIndex.h"
 
 namespace DB::DM
@@ -221,7 +223,11 @@ bool DeltaValueReader::shouldPlace(
 {
     auto [placed_rows, placed_delete_ranges] = my_delta_index->getPlacedStatus();
 
-    std::cout << fmt::format("placed_rows={} snap_rows={} has_dup={}\n", placed_rows, delta_snap->getRows(), my_delta_index->getDeltaTree()->lastDupTupleID());
+    std::cout << fmt::format(
+        "placed_rows={} snap_rows={} has_dup={}\n",
+        placed_rows,
+        delta_snap->getRows(),
+        my_delta_index->getDeltaTree()->lastDupTupleID());
     // The placed_rows, placed_delete_range already contains the data in delta_snap
     if (placed_rows >= delta_snap->getRows() && placed_delete_ranges == delta_snap->getDeletes())
     {
