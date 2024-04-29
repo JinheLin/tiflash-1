@@ -264,7 +264,7 @@ bool placeInsert(
         if (dup)
         {
             delta_tree.addDelete(rid);
-            delta_tree.setDup();
+            delta_tree.setLastDupTupleID(tuple_id);
         }
         delta_tree.addInsert(rid, tuple_id);
         std::cout << fmt::format("rid={}, tuple_id={}\n", rid, tuple_id);

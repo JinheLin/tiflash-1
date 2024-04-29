@@ -221,17 +221,16 @@ bool DeltaValueReader::shouldPlace(
 {
     auto [placed_rows, placed_delete_ranges] = my_delta_index->getPlacedStatus();
 
-    std::cout << fmt::format("placed_rows={} snap_rows={} has_dup={}\n", placed_rows, delta_snap->getRows(), my_delta_index->getDeltaTree()->hasDup());
+    std::cout << fmt::format("placed_rows={} snap_rows={} has_dup={}\n", placed_rows, delta_snap->getRows(), my_delta_index->getDeltaTree()->lastDupTupleID());
     // The placed_rows, placed_delete_range already contains the data in delta_snap
     if (placed_rows >= delta_snap->getRows() && placed_delete_ranges == delta_snap->getDeletes())
     {
-        // It is perfectly match or does not has duplicated records, so we can reuse this delta index safely.
-        if (placed_rows == delta_snap->getRows() || !my_delta_index->getDeltaTree()->hasDup())
+        // The snapshot includes all the duplicated records, so we can reuse this delta index safely.
+        if (my_delta_index->getDeltaTree()->lastDupTupleID() < static_cast<Int64>(delta_snap->getRows()))
             return false;
-        
-        // It is more advanced than snapshot and has duplicated records.
-        // It is dangerous to reuse this delta index, clear it.
-        assert(placed_rows > delta_snap->getRows() && my_delta_index->getDeltaTree()->hasDup());
+
+        // Some duplicated records are not included by the snapshot, reusing this delta index is unsafe, so clear it.
+        // https://github.com/pingcap/tiflash/issues/8845
         auto tmp = std::make_shared<DeltaIndex>();
         my_delta_index->swap(*tmp);
         return true;
