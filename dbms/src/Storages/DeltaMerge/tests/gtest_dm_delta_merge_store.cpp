@@ -3837,6 +3837,18 @@ void DeltaMergeStoreRWTest::dupHandleVersionAndDeltaIndexAdvancedThanSnapshot()
         return tasks.begin()->second;
     };
 
+    auto clone_delta_index = [](SegmentReadTaskPtr seg_read_task) {
+        auto delta_snap = seg_read_task->read_snapshot->delta;
+        return delta_snap->getSharedDeltaIndex()->tryClone(delta_snap->getRows(), delta_snap->getDeletes());
+    };
+
+    auto check_delta_index = [](DeltaIndexPtr delta_index, size_t expect_rows, size_t expect_deletes, Int64 expect_last_dup_tuple_id) {
+        auto [placed_rows, placed_deletes] = delta_index->getPlacedStatus();
+        ASSERT_EQ(placed_rows, expect_rows);
+        ASSERT_EQ(placed_deletes, expect_deletes);
+        ASSERT_EQ(delta_index->getDeltaTree()->lastDupTupleID(), expect_last_dup_tuple_id);
+    };
+
     auto ensure_place = [&](SegmentReadTaskPtr seg_read_task) {
         auto pk_ver_col_defs = std::make_shared<ColumnDefines>(
             ColumnDefines{getExtraHandleColumnDefine(dm_context->is_common_handle), getVersionColumnDefine()});
@@ -3868,85 +3880,79 @@ void DeltaMergeStoreRWTest::dupHandleVersionAndDeltaIndexAdvancedThanSnapshot()
         ASSERT_EQ(count, 128);
     }
 
-    // Delta index is advanced than snapsot.
-
-    /** Case 1. The gap between snapshot and delta index has duplicated records. **/
-
-    // In case 1, this snapshot should rebuild delta index for itself.
+    // The snapshot does not include all the duplicated tuples of the delta index.
+    // This snapshot should rebuild delta index for itself.
     // https://github.com/pingcap/tiflash/issues/8845
-
-    // Create snapshot but not place index
-    auto stream1 = create_stream();
-
-    // !!!Duplicated!!!: Write [50, 60) with ts 2
-    write_block(50, 60, 2);
-
-    // Place index with newest data.
-    auto stream2 = create_stream();
-    auto count2 = count_rows(stream2);
-    ASSERT_EQ(count2, 128);
-
-    // stream1 should not resue delta index of stream2
-
-    // Check delta index internal
     {
-        auto seg_read_task = get_seg_read_task(stream1);
+        // Create snapshot but not place index
+        auto stream1 = create_stream();
 
-        // Shared delta index has been placed to the newest by `count_rows(stream2)`.
-        auto shared_delta_index = seg_read_task->read_snapshot->delta->getSharedDeltaIndex();
-        auto [shared_placed_rows, shared_placed_deletes] = shared_delta_index->getPlacedStatus();
-        ASSERT_EQ(shared_placed_rows, 20);
-        ASSERT_EQ(shared_placed_deletes, 0);
-        ASSERT_EQ(shared_delta_index->getDeltaTree()->lastDupTupleID(), 19);
+        // !!!Duplicated!!!: Write [50, 60) with ts 2
+        write_block(50, 60, 2);
 
-        auto [delta_index, fully_indexed] = ensure_place(seg_read_task);
-        // It contains duplicated records in the gap of snapshot and Should not reuse delta index here.
-        ASSERT_TRUE(fully_indexed);
-        auto [local_placed_rows, local_placed_deletes] = delta_index->getPlacedStatus();
-        ASSERT_EQ(local_placed_rows, 10);
-        ASSERT_EQ(local_placed_deletes, 0);
-        ASSERT_EQ(delta_index->getDeltaTree()->lastDupTupleID(), -1);
+        // Place index with newest data.
+        auto stream2 = create_stream();
+        auto count2 = count_rows(stream2);
+        ASSERT_EQ(count2, 128);
+
+        // stream1 should not resue delta index of stream2
+
+        // Check cloning delta index
+        {
+            auto seg_read_task = get_seg_read_task(stream1);
+
+            // Shared delta index has been placed to the newest by `count_rows(stream2)`.
+            auto shared_delta_index = seg_read_task->read_snapshot->delta->getSharedDeltaIndex();
+            check_delta_index(shared_delta_index, 20, 0, 19);
+
+            // Cannot clone delta index because it contains duplicated records in the gap of snapshot and the shared delta index.
+            auto cloned_delta_index = clone_delta_index(seg_read_task);
+            check_delta_index(cloned_delta_index, 0, 0, -1);
+        }
+        // Check scanning result of stream1
+        auto count1 = count_rows(stream1);
+        ASSERT_EQ(count1, count2);
     }
-    // Check scanning result of stream1
-    auto count1 = count_rows(stream1);
-    ASSERT_EQ(count1, count2);
 
     // Make sure shared delta index can be reused by new snapshot
     {
         auto stream = create_stream();
         auto seg_read_task = get_seg_read_task(stream);
-        auto [delta_index, fully_indexed] = ensure_place(seg_read_task);
-        ASSERT_FALSE(fully_indexed);
-        auto [placed_rows, placed_deletes] = delta_index->getPlacedStatus();
-        ASSERT_EQ(placed_rows, 20);
-        ASSERT_EQ(placed_deletes, 0);
-        ASSERT_EQ(delta_index->getDeltaTree()->lastDupTupleID(), 19);
+        auto cloned_delta_index = clone_delta_index(seg_read_task);
+        check_delta_index(cloned_delta_index, 20, 0, 19);
     }
 
-
-    /** Case 2. The gap between snapshot and delta index has no duplicated records. **/
-
-    // In case 2, delta index can be reused safely.
-
-    // Write [70, 80) with ts 2 for initializing delta.
-    /*
-    write_block(70, 80, 2);
-    auto stream3 = create_stream();
+    // The snapshot includes all the duplicated tuples of the delta index.
+    // Delta index can be reused safely.
     {
-        auto seg_read_task = get_seg_read_task(stream3);
-
-        auto [delta_index, fully_indexed] = ensure_place(seg_read_task);
-            
+        write_block(70, 80, 2);
+        auto stream = create_stream();
+        auto seg_read_task = get_seg_read_task(stream);
+        auto shared_delta_index = seg_read_task->read_snapshot->delta->getSharedDeltaIndex();
+        check_delta_index(shared_delta_index, 20, 0, 19);
+        auto cloned_delta_index = clone_delta_index(seg_read_task);
+        check_delta_index(cloned_delta_index, 20, 0, 19);
+        auto [placed_delta_index, fully_indexed] = ensure_place(seg_read_task);
         ASSERT_TRUE(fully_indexed);
-        auto [local_placed_rows, local_placed_deletes] = delta_index->getPlacedStatus();
-        ASSERT_EQ(local_placed_rows, 30);
-        ASSERT_EQ(local_placed_deletes, 0);
-        ASSERT_EQ(delta_index->getDeltaTree()->lastDupTupleID(), 19);
-        
-        
-        auto count1 = count_rows(stream1);
-        ASSERT_EQ(count1, count2);
-    }*/
+        check_delta_index(placed_delta_index, 30, 0, 19);   
+        auto count = count_rows(stream);
+        ASSERT_EQ(count, 128);
+    }
+    
+    {
+        write_block(75, 85, 2);
+        auto stream = create_stream();
+        auto seg_read_task = get_seg_read_task(stream);
+        auto shared_delta_index = seg_read_task->read_snapshot->delta->getSharedDeltaIndex();
+        check_delta_index(shared_delta_index, 30, 0, 19);
+        auto cloned_delta_index = clone_delta_index(seg_read_task);
+        check_delta_index(cloned_delta_index, 30, 0, 19);
+        auto [placed_delta_index, fully_indexed] = ensure_place(seg_read_task);
+        ASSERT_TRUE(fully_indexed);
+        check_delta_index(placed_delta_index, 40, 0, 34);
+        auto count = count_rows(stream);
+        ASSERT_EQ(count, 128);
+    }
 }
 
 TEST_P(DeltaMergeStoreRWTest, DupHandleVersionAndDeltaIndexAdvancedThanSnapshot)

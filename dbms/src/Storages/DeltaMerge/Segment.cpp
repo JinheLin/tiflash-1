@@ -2577,7 +2577,6 @@ std::pair<DeltaIndexPtr, bool> Segment::ensurePlace(
                                                 : RowKeyRange::newAll(is_common_handle, rowkey_column_size);
 
     auto [my_placed_rows, my_placed_deletes] = my_delta_index->getPlacedStatus();
-    std::cout << fmt::format("my_placed_rows={}, my_placed_deletes={}\n", my_placed_rows, my_placed_deletes);
 
     // Let's do a fast check, determine whether we need to do place or not.
     if (!delta_reader->shouldPlace(dm_context, my_delta_index, rowkey_range, relevant_range, start_ts))
