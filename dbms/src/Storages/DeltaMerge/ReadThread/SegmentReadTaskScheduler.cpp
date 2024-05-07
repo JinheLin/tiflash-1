@@ -46,6 +46,7 @@ void SegmentReadTaskScheduler::add(const SegmentReadTaskPoolPtr & pool)
     add_waittings.fetch_add(1, std::memory_order_relaxed);
     // `lock` is used to protect data.
     std::lock_guard lock(mtx);
+    add_waittings.fetch_sub(1, std::memory_order_relaxed);
     Stopwatch sw_do_add;
     read_pools.emplace(pool->pool_id, pool);
 
