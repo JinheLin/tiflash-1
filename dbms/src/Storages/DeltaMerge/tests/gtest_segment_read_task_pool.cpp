@@ -43,7 +43,6 @@ protected:
         return std::make_shared<SegmentReadTask>(
             createSegment(seg_id),
             createSegmentSnapshot(),
-            createDMContext(),
             RowKeyRanges{});
     }
 
@@ -76,9 +75,11 @@ protected:
 
     SegmentReadTaskPoolPtr createSegmentReadTaskPool(const std::vector<PageIdU64> & seg_ids)
     {
-        auto dm_context = createDMContext();
+        DMContextPtr dm_context{createDMContext()};
         return std::make_shared<SegmentReadTaskPool>(
+            dm_context->physical_table_id,
             /*extra_table_id_index_*/ dm_context->physical_table_id,
+            dm_context,
             /*columns_to_read_*/ ColumnDefines{},
             /*filter_*/ nullptr,
             /*max_version_*/ 0,
@@ -186,7 +187,7 @@ TEST_F(SegmentReadTasksPoolTest, SchedulerBasic)
             ASSERT_FALSE(scheduler.needScheduleToRead(pool));
             auto merged_task = merged_tasks.back();
             ASSERT_EQ(merged_task->units.size(), 1);
-            pool->finishSegment(merged_task->units.front().task);
+            pool->finishSegment(merged_task->units.front().task->segment);
             ASSERT_TRUE(scheduler.needScheduleToRead(pool));
         }
 
@@ -216,7 +217,7 @@ TEST_F(SegmentReadTasksPoolTest, SchedulerBasic)
             {
                 auto merged_task = merged_tasks.back();
                 merged_tasks.pop_back();
-                pool->finishSegment(merged_task->units.front().task);
+                pool->finishSegment(merged_task->units.front().task->segment);
             }
 
             for (;;)
@@ -227,7 +228,7 @@ TEST_F(SegmentReadTasksPoolTest, SchedulerBasic)
                 {
                     break;
                 }
-                pool->finishSegment(merged_task->units.front().task);
+                pool->finishSegment(merged_task->units.front().task->segment);
             }
 
             ASSERT_EQ(pool->q.size(), 0);
