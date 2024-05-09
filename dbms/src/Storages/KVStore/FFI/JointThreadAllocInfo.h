@@ -89,7 +89,7 @@ private:
     bool is_terminated{false};
     mutable std::mutex monitoring_mut;
     std::condition_variable monitoring_cv;
-    std::thread * monitoring_thread{nullptr};
+    std::thread monitoring_thread;
 };
 
 using JointThreadInfoJeallocMapPtr = std::shared_ptr<JointThreadInfoJeallocMap>;

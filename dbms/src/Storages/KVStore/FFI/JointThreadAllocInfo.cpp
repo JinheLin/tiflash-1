@@ -25,7 +25,7 @@ namespace DB
 
 JointThreadInfoJeallocMap::JointThreadInfoJeallocMap()
 {
-    monitoring_thread = new std::thread([&]() {
+    monitoring_thread = std::thread([&]() {
         while (true)
         {
             using namespace std::chrono_literals;
@@ -170,15 +170,11 @@ void JointThreadInfoJeallocMap::stopThreadAllocInfo()
     LOG_INFO(DB::Logger::get(), "Stop collecting thread alloc metrics");
     {
         std::unique_lock lk(monitoring_mut);
-        if (monitoring_thread == nullptr)
-            return;
         is_terminated = true;
         monitoring_cv.notify_all();
     }
     LOG_INFO(DB::Logger::get(), "JointThreadInfoJeallocMap shutdown, wait thread alloc monitor join");
-    monitoring_thread->join();
-    delete monitoring_thread;
-    monitoring_thread = nullptr;
+    monitoring_thread.join();
 }
 
 } // namespace DB
