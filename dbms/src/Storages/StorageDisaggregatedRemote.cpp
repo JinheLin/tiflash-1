@@ -526,10 +526,11 @@ std::variant<DM::Remote::RNWorkersPtr, DM::SegmentReadTaskPoolPtr> StorageDisagg
     const auto & executor_id = table_scan.getTableScanExecutorID();
 
     auto rs_operator = buildRSOperator(db_context, column_defines);
-    auto push_down_filter = StorageDeltaMerge::buildPushDownFilter(
+    auto push_down_filter = DM::PushDownFilter::build(
         rs_operator,
         table_scan.getColumns(),
         table_scan.getPushedDownFilters(),
+        /*ordinary_filter*/ {},
         *column_defines,
         db_context,
         log);

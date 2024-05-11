@@ -27,6 +27,9 @@
 #include <IO/WriteHelpers.h>
 #include <Poco/String.h>
 #include <Poco/Timespan.h>
+#include <Storages/DeltaMerge/Filter/FilterExecutionMode.h>
+
+#include <magic_enum.hpp>
 
 namespace DB
 {
@@ -845,6 +848,57 @@ public:
 
 private:
     String value;
+};
+
+
+struct SettingFilterExecutionMode
+{
+public:
+    bool changed = false;
+
+    SettingFilterExecutionMode(
+        FilterExecutionMode x = FilterExecutionMode::Computation) // NOLINT(google-explicit-constructor)
+        : value(x)
+    {}
+
+    operator FilterExecutionMode() const { return value; } // NOLINT(google-explicit-constructor)
+    SettingFilterExecutionMode & operator=(FilterExecutionMode x)
+    {
+        set(x);
+        return *this;
+    }
+
+    void set(FilterExecutionMode x)
+    {
+        value = x;
+        changed = true;
+    }
+
+    void set(const Field & x) { set(safeGet<const String &>(x)); }
+
+    void set(const String & x) { set(getFilterExecutionMode(x)); }
+
+    void set(ReadBuffer & buf)
+    {
+        String x;
+        readBinary(x, buf);
+        set(x);
+    }
+
+    void write(WriteBuffer & buf) const { writeBinary(toString(), buf); }
+
+    FilterExecutionMode get() const { return value; }
+
+    String toString() const { return String(magic_enum::enum_name(value)); }
+
+private:
+    static FilterExecutionMode getFilterExecutionMode(const String & s)
+    {
+        auto v = magic_enum::enum_cast<FilterExecutionMode>(s);
+        RUNTIME_CHECK_MSG(v.has_value(), "Unknown filter execution mode: {}", s);
+        return *v;
+    }
+    FilterExecutionMode value;
 };
 
 } // namespace DB

@@ -14,29 +14,29 @@
 
 #pragma once
 
+#include <Flash/Coprocessor/TiDBTableScan.h>
 #include <Interpreters/ExpressionActions.h>
 #include <Storages/DeltaMerge/Filter/RSOperator.h>
 
 namespace DB::DM
 {
 
+class QueryFilter;
+using QueryFilterPtr = std::shared_ptr<QueryFilter>;
 class PushDownFilter;
 using PushDownFilterPtr = std::shared_ptr<PushDownFilter>;
-inline static const PushDownFilterPtr EMPTY_FILTER{};
 
-class PushDownFilter
+class QueryFilter
 {
 public:
-    PushDownFilter(
-        const RSOperatorPtr & rs_operator_,
+    QueryFilter(
         const ExpressionActionsPtr & beofre_where_,
         const ExpressionActionsPtr & project_after_where_,
         const ColumnDefinesPtr & filter_columns_,
         const String filter_column_name_,
         const ExpressionActionsPtr & extra_cast_,
         const ColumnDefinesPtr & columns_after_cast_)
-        : rs_operator(rs_operator_)
-        , before_where(beofre_where_)
+        : before_where(beofre_where_)
         , project_after_where(project_after_where_)
         , filter_column_name(std::move(filter_column_name_))
         , filter_columns(filter_columns_)
@@ -44,12 +44,6 @@ public:
         , columns_after_cast(columns_after_cast_)
     {}
 
-    explicit PushDownFilter(const RSOperatorPtr & rs_operator_)
-        : rs_operator(rs_operator_)
-    {}
-
-    // Rough set operator
-    RSOperatorPtr rs_operator;
     // Filter expression actions and the name of the tmp filter column
     // Used construct the FilterBlockInputStream
     const ExpressionActionsPtr before_where;
@@ -64,6 +58,41 @@ public:
     const ExpressionActionsPtr extra_cast;
     // If the extra_cast is not null, the types of the columns may be changed
     const ColumnDefinesPtr columns_after_cast;
+
+    static QueryFilterPtr build(
+        const ColumnInfos & table_scan_column_info,
+        const google::protobuf::RepeatedPtrField<tipb::Expr> & filters,
+        const ColumnDefines & columns_to_read,
+        const Context & context,
+        const LoggerPtr & tracing_logger);
 };
+
+class PushDownFilter
+{
+public:
+    PushDownFilter(
+        const RSOperatorPtr & rs_operator_,
+        const QueryFilterPtr & lm_filter_,
+        const QueryFilterPtr & ordinary_filter_)
+        : rs_operator(rs_operator_)
+        , lm_filter(lm_filter_)
+        , ordinary_filter(ordinary_filter_)
+    {}
+
+    RSOperatorPtr rs_operator;
+    QueryFilterPtr lm_filter;
+    QueryFilterPtr ordinary_filter;
+
+    static PushDownFilterPtr build(
+        const RSOperatorPtr & rs_operator,
+        const ColumnInfos & table_scan_column_info,
+        const google::protobuf::RepeatedPtrField<tipb::Expr> & lm_filters,
+        const google::protobuf::RepeatedPtrField<tipb::Expr> & ordinary_filters,
+        const ColumnDefines & columns_to_read,
+        const Context & context,
+        const LoggerPtr & tracing_logger);
+};
+
+inline static const PushDownFilterPtr EMPTY_FILTER = std::make_shared<PushDownFilter>(nullptr, nullptr, nullptr);
 
 } // namespace DB::DM
