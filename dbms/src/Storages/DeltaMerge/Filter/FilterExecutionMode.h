@@ -17,13 +17,16 @@
 namespace DB
 {
 // The execution mode of DAGQueryInfo::filters.
-// Computation - DAGQueryInfo::filters are executed in threads of computation.
-// Storage - DAGQueryInfo::filters are executed in threads of storage, but not for late materialization.
-// LM - DAGQueryInfo::filters are merged with DAGQueryInfo::pushed_down_filters, for late materialization.
 enum class FilterExecutionMode
 {
+    // Executed in computational layer.
     Computation = 0,
+
+    // Executed in storage layer, but not for late materialization.
+    // Only in this mode will the filters use min-max index to reduce computation.
     Storage = 1,
+
+    // Merged with DAGQueryInfo::pushed_down_filters for late materialization.
     LM = 2,
 };
 

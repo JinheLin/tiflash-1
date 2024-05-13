@@ -79,6 +79,16 @@ public:
         , ordinary_filter(ordinary_filter_)
     {}
 
+    bool hasLMFilter() const
+    {
+        return isNotEmpty(lm_filter);
+    }
+
+    bool hasFilter() const
+    {
+        return isNotEmpty(lm_filter) || isNotEmpty(ordinary_filter);
+    }
+
     RSOperatorPtr rs_operator;
     QueryFilterPtr lm_filter;
     QueryFilterPtr ordinary_filter;
@@ -91,6 +101,11 @@ public:
         const ColumnDefines & columns_to_read,
         const Context & context,
         const LoggerPtr & tracing_logger);
+private:
+    static bool isNotEmpty(QueryFilterPtr filter)
+    {
+        return filter && filter->before_where;
+    }
 };
 
 inline static const PushDownFilterPtr EMPTY_FILTER = std::make_shared<PushDownFilter>(nullptr, nullptr, nullptr);
