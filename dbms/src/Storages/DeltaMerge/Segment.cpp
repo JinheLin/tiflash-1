@@ -3467,7 +3467,7 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
     {
         segment_snap->stable->clearColumnCaches();
     }
-
+/*
     if (dm_context.global_context.getSettingsRef().filter_execution_mode == FilterExecutionMode::Storage && filter->hasFilter())
     {
         return getFilterPushDownStream(
@@ -3480,7 +3480,7 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
             start_ts,
             read_data_block_rows);
     }
-
+*/
     if (filter->hasLMFilter())
     {
         // if has filter conditions pushed down, use late materialization
