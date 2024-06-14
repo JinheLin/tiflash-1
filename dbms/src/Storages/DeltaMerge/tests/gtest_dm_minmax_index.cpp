@@ -59,7 +59,6 @@ protected:
 
     void TearDown() override { context->dropMinMaxIndexCache(); }
 
-private:
 protected:
     // a ptr to context, we can reload context with different settings if need.
     ContextPtr context;
@@ -2029,8 +2028,8 @@ try
     auto data_type = makeNullable(type);
 
     // Generate a minmax index with the min value is null as a old version(before v6.4) minmax index.
-    auto has_null_marks = std::make_shared<PaddedPODArray<UInt8>>(1);
-    auto has_value_marks = std::make_shared<PaddedPODArray<UInt8>>(1);
+    PaddedPODArray<UInt8> has_null_marks(1);
+    PaddedPODArray<UInt8> has_value_marks(1);
     MutableColumnPtr minmaxes = data_type->createColumn();
 
     auto column = data_type->createColumn();
@@ -2042,7 +2041,7 @@ try
     minmaxes->insertFrom(*col, 1); // insert min index
     minmaxes->insertFrom(*col, 0); // insert max index
 
-    auto minmax = std::make_shared<MinMaxIndex>(has_null_marks, has_value_marks, std::move(minmaxes));
+    auto minmax = std::make_shared<MinMaxIndex>(std::move(has_null_marks), std::move(has_value_marks), std::move(minmaxes));
 
     auto index = RSIndex(data_type, minmax);
     param.indexes.emplace(DEFAULT_COL_ID, index);
@@ -2062,8 +2061,8 @@ try
     auto type = std::make_shared<DataTypeInt64>();
     auto data_type = makeNullable(type);
 
-    auto has_null_marks = std::make_shared<PaddedPODArray<UInt8>>(1);
-    auto has_value_marks = std::make_shared<PaddedPODArray<UInt8>>(1);
+    PaddedPODArray<UInt8> has_null_marks(1);
+    PaddedPODArray<UInt8> has_value_marks(1);
     MutableColumnPtr minmaxes = data_type->createColumn();
 
     auto column = data_type->createColumn();
@@ -2076,7 +2075,7 @@ try
     minmaxes->insertFrom(*col, 0); // insert min index
     minmaxes->insertFrom(*col, 1); // insert max index
 
-    auto minmax = std::make_shared<MinMaxIndex>(has_null_marks, has_value_marks, std::move(minmaxes));
+    auto minmax = std::make_shared<MinMaxIndex>(std::move(has_null_marks), std::move(has_value_marks), std::move(minmaxes));
 
     auto index = RSIndex(data_type, minmax);
     param.indexes.emplace(DEFAULT_COL_ID, index);
