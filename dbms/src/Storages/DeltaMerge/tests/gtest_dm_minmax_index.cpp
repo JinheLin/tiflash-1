@@ -31,6 +31,10 @@
 #include <TestUtils/TiFlashTestBasic.h>
 
 #include <ext/scope_guard.h>
+#include <source_location>
+
+#include "Storages/DeltaMerge/Index/RSResult.h"
+#include "magic_enum.hpp"
 
 namespace DB::DM::tests
 {
@@ -2255,29 +2259,80 @@ try
 }
 CATCH
 
-TEST_F(MinMaxIndexTest, CheckNullableCmpRSResult)
+TEST_F(MinMaxIndexTest, CheckNullableColumn)
 try
 {
     auto col_type = makeNullable(std::make_shared<DataTypeInt64>());
     auto minmax_index = std::make_shared<MinMaxIndex>(*col_type);
 
-    auto column = col_type->createColumn();
-    constexpr Int64 min_value = 1;
-    constexpr Int64 max_value = 63;
-    for (auto i = min_value; i <= max_value; i++)
-    {
-        column->insert(Field(i));
-    }
-    column->insertDefault(); // insert null value
-    minmax_index->addPack(*column, nullptr);
+    auto create_column = [&](Int64 start, Int64 size, bool has_null) {
+        auto column = col_type->createColumn();
+        for (Int64 i = 0; i < size; i++)
+        {
+            column->insert(Field(start + i));
+        }
+        if (has_null)
+        {
+            column->insertDefault(); // insert null value
+        }
+        return column;
+    };
+    auto cmp_results = [](const RSResults & actual, const RSResults & expected, std::source_location location) {
+        ASSERT_EQ(actual.size(), expected.size());
+        if (actual == expected)
+        {
+            return;
+        }
+        for (size_t i = 0; i < actual.size(); i++)
+        {
+            ASSERT_EQ(actual[i], expected[i]) << fmt::format(
+                "{}: i={}, actual={}, expected={}",
+                location.line(),
+                i,
+                magic_enum::enum_name(actual[i]),
+                magic_enum::enum_name(expected[i]));
+        }
+    };
 
-    auto [min, max] = minmax_index->getIntMinMaxOrNull(0);
-    std::cout << min << std::endl;
-    std::cout << max << std::endl;
-    auto res = minmax_index->checkIsNull(0, 1)[0];
-    std::cout << magic_enum::enum_name(res) << std::endl;
-    res = minmax_index->checkCmp<RoughCheck::CheckGreater>(0, 1, Field(static_cast<Int64>(0)), col_type)[0];
-    ASSERT_EQ(res, RSResult::Some) << magic_enum::enum_name(res);
+
+    std::vector<std::tuple<Int64, Int64, bool>> minmax_infos = {
+        {1, 5, true}, // ColumnData: 1, 2, 3, 4, 5, null
+        {6, 5, false}, // ColumnData: 6, 7, 8, 9, 10
+        {0, 0, true}, // ColumnData: null
+        {11, 5, true}, // ColumnData: 11, 12, 13, 14, 15, null
+    };
+    for (auto [min, max, has_null] : minmax_infos)
+    {
+        auto column = create_column(min, max, has_null);
+        minmax_index->addPack(*column, nullptr);
+    }
+
+    auto results = minmax_index->checkIsNull(0, minmax_infos.size());
+    cmp_results(
+        results,
+        {RSResult::Some, RSResult::None, RSResult::All, RSResult::Some},
+        std::source_location::current());
+
+    results = minmax_index->checkIn(
+        0,
+        minmax_infos.size(),
+        {Field(static_cast<Int64>(1)),
+         Field(static_cast<Int64>(2)),
+         Field(static_cast<Int64>(3)),
+         Field(static_cast<Int64>(4)),
+         Field(static_cast<Int64>(5)),
+         static_cast<Int64>(6)},
+        col_type);
+    cmp_results(
+        results,
+        {RSResult::All, RSResult::Some, RSResult::None, RSResult::None},
+        std::source_location::current());
+
+    results = minmax_index->checkCmp<RoughCheck::CheckGreater>(0, 1, Field(static_cast<Int64>(5)), col_type);
+    cmp_results(
+        results,
+        {RSResult::None, RSResult::All, RSResult::None, RSResult::Some},
+        std::source_location::current());
 }
 CATCH
 

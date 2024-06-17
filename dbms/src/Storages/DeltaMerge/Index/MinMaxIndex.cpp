@@ -29,6 +29,8 @@
 #include <Storages/DeltaMerge/Index/MinMaxIndex.h>
 #include <Storages/DeltaMerge/Index/RoughCheck.h>
 
+#include "magic_enum.hpp"
+
 namespace DB::DM
 {
 
@@ -489,6 +491,7 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
     const Field & value,
     const DataTypePtr & type)
 {
+    std::cout << __PRETTY_FUNCTION__ << std::endl;
     RSResults results(pack_count, RSResult::Some);
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
@@ -498,6 +501,10 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
         results[i - start_pack] = Op::template check<T>(value, type, min, max);
+
+        //&& (has_null_marks[i] ? RSResult::Some : RSResult::All);
+        //std::cout << fmt::format("value:{}, min:{}, max:{}, has_null:{}, result:{}\n",
+        //value.toString(), min, max, has_null_marks[i], magic_enum::enum_name(results[i-start_pack])) << std::endl;
     }
     return results;
 }
@@ -509,6 +516,7 @@ RSResults MinMaxIndex::checkNullableCmp(
     const Field & value,
     const DataTypePtr & type)
 {
+    std::cout << __PRETTY_FUNCTION__ << std::endl;
     const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
     const auto & null_map = column_nullable.getNullMapColumn();
 
