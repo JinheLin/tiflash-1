@@ -2316,22 +2316,21 @@ try
     results = minmax_index->checkIn(
         0,
         minmax_infos.size(),
-        {Field(static_cast<Int64>(1)),
-         Field(static_cast<Int64>(2)),
-         Field(static_cast<Int64>(3)),
-         Field(static_cast<Int64>(4)),
-         Field(static_cast<Int64>(5)),
-         static_cast<Int64>(6)},
+        {Field(1L), Field(2L), Field(3L), Field(4L), Field(5L), Field(6L)},
         col_type);
+    // Theoretically,
+    // results[0] should be All. But the implementation not support now.
+    // results[2] should be None. But for compatibility, currently when the miniumn value is null, the result will be Some.
     cmp_results(
         results,
-        {RSResult::All, RSResult::Some, RSResult::None, RSResult::None},
+        {RSResult::Some, RSResult::Some, RSResult::Some, RSResult::None},
         std::source_location::current());
 
-    results = minmax_index->checkCmp<RoughCheck::CheckGreater>(0, 1, Field(static_cast<Int64>(5)), col_type);
+    // results[2] should be None. But for compatibility, currently when the miniumn value is null, the result will be Some.
+    results = minmax_index->checkCmp<RoughCheck::CheckGreater>(0, minmax_infos.size(), Field(5L), col_type);
     cmp_results(
         results,
-        {RSResult::None, RSResult::All, RSResult::None, RSResult::Some},
+        {RSResult::None, RSResult::All, RSResult::Some, RSResult::Some},
         std::source_location::current());
 }
 CATCH

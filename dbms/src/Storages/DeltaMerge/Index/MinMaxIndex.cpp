@@ -29,8 +29,6 @@
 #include <Storages/DeltaMerge/Index/MinMaxIndex.h>
 #include <Storages/DeltaMerge/Index/RoughCheck.h>
 
-#include "magic_enum.hpp"
-
 namespace DB::DM
 {
 
@@ -100,6 +98,11 @@ inline std::pair<size_t, size_t> minmax(
 ALWAYS_INLINE bool minIsNull(const DB::ColumnUInt8 & null_map, size_t i)
 {
     return null_map.getElement(i * 2);
+}
+
+ALWAYS_INLINE bool maxIsNull(const DB::ColumnUInt8 & null_map, size_t i)
+{
+    return null_map.getElement(i * 2 + 1);
 }
 } // namespace details
 
@@ -342,6 +345,7 @@ RSResults MinMaxIndex::checkInImpl(
     return results;
 }
 
+// Currently, only when the minimun value and the maximun value are equal can CheckIn return RSResult::All.
 RSResults MinMaxIndex::checkIn(
     size_t start_pack,
     size_t pack_count,
@@ -491,7 +495,6 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
     const Field & value,
     const DataTypePtr & type)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     RSResults results(pack_count, RSResult::Some);
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
@@ -500,11 +503,8 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
             continue;
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
-        results[i - start_pack] = Op::template check<T>(value, type, min, max);
-
-        //&& (has_null_marks[i] ? RSResult::Some : RSResult::All);
-        //std::cout << fmt::format("value:{}, min:{}, max:{}, has_null:{}, result:{}\n",
-        //value.toString(), min, max, has_null_marks[i], magic_enum::enum_name(results[i-start_pack])) << std::endl;
+        results[i - start_pack]
+            = Op::template check<T>(value, type, min, max) && (has_null_marks[i] ? RSResult::Some : RSResult::All);
     }
     return results;
 }
@@ -516,7 +516,6 @@ RSResults MinMaxIndex::checkNullableCmp(
     const Field & value,
     const DataTypePtr & type)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
     const auto & null_map = column_nullable.getNullMapColumn();
 
@@ -590,7 +589,12 @@ RSResults MinMaxIndex::checkIsNull(size_t start_pack, size_t pack_count)
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
         if (has_null_marks[i])
-            results[i - start_pack] = RSResult::Some;
+        {
+            const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
+            const auto & null_map = column_nullable.getNullMapColumn();
+            results[i - start_pack]
+                = details::minIsNull(null_map, i) && details::maxIsNull(null_map, i) ? RSResult::All : RSResult::Some;
+        }
     }
     return results;
 }
