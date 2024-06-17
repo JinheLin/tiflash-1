@@ -30,13 +30,11 @@ using MinMaxIndexPtr = std::shared_ptr<MinMaxIndex>;
 
 class MinMaxIndex
 {
-private:
-    PaddedPODArray<UInt8> has_null_marks;
-    PaddedPODArray<UInt8> has_value_marks;
-    MutableColumnPtr minmaxes;
-
 public:
-    MinMaxIndex(PaddedPODArray<UInt8> && has_null_marks_, PaddedPODArray<UInt8> && has_value_marks_, MutableColumnPtr && minmaxes_)
+    MinMaxIndex(
+        PaddedPODArray<UInt8> && has_null_marks_,
+        PaddedPODArray<UInt8> && has_value_marks_,
+        MutableColumnPtr && minmaxes_)
         : has_null_marks(std::move(has_null_marks_))
         , has_value_marks(std::move(has_value_marks_))
         , minmaxes(std::move(minmaxes_))
@@ -71,6 +69,17 @@ public:
 
     template <typename Op>
     RSResults checkCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type);
+
+    // TODO: merge with checkCmp
+    RSResults checkIn(
+        size_t start_pack,
+        size_t pack_count,
+        const std::vector<Field> & values,
+        const DataTypePtr & type);
+
+    RSResults checkIsNull(size_t start_pack, size_t pack_count);
+
+private:
     template <typename Op, typename T>
     RSResults checkCmpImpl(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type);
     template <typename Op>
@@ -84,12 +93,6 @@ public:
         const Field & value,
         const DataTypePtr & type);
 
-    // TODO: merge with checkCmp
-    RSResults checkIn(
-        size_t start_pack,
-        size_t pack_count,
-        const std::vector<Field> & values,
-        const DataTypePtr & type);
     template <typename T>
     RSResults checkInImpl(
         size_t start_pack,
@@ -110,9 +113,10 @@ public:
         const std::vector<Field> & values,
         const DataTypePtr & type);
 
-    RSResults checkIsNull(size_t start_pack, size_t pack_count);
+    PaddedPODArray<UInt8> has_null_marks;
+    PaddedPODArray<UInt8> has_value_marks;
+    MutableColumnPtr minmaxes;
 };
-
 
 struct MinMaxIndexWeightFunction
 {
@@ -136,7 +140,6 @@ struct MinMaxIndexWeightFunction
     }
 };
 
-
 class MinMaxIndexCache : public LRUCache<String, MinMaxIndex, std::hash<String>, MinMaxIndexWeightFunction>
 {
 private:
@@ -157,4 +160,4 @@ public:
 
 using MinMaxIndexCachePtr = std::shared_ptr<MinMaxIndexCache>;
 
-}
+} // namespace DB::DM

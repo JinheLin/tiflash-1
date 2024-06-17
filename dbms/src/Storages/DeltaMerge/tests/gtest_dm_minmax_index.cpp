@@ -2039,7 +2039,8 @@ try
     minmaxes->insertFrom(*col, 1); // insert min index
     minmaxes->insertFrom(*col, 0); // insert max index
 
-    auto minmax = std::make_shared<MinMaxIndex>(std::move(has_null_marks), std::move(has_value_marks), std::move(minmaxes));
+    auto minmax
+        = std::make_shared<MinMaxIndex>(std::move(has_null_marks), std::move(has_value_marks), std::move(minmaxes));
 
     auto index = RSIndex(data_type, minmax);
     param.indexes.emplace(DEFAULT_COL_ID, index);
@@ -2073,7 +2074,8 @@ try
     minmaxes->insertFrom(*col, 0); // insert min index
     minmaxes->insertFrom(*col, 1); // insert max index
 
-    auto minmax = std::make_shared<MinMaxIndex>(std::move(has_null_marks), std::move(has_value_marks), std::move(minmaxes));
+    auto minmax
+        = std::make_shared<MinMaxIndex>(std::move(has_null_marks), std::move(has_value_marks), std::move(minmaxes));
 
     auto index = RSIndex(data_type, minmax);
     param.indexes.emplace(DEFAULT_COL_ID, index);
@@ -2250,6 +2252,32 @@ try
     EXPECT_EQ(
         op->toDebugString(),
         R"raw({"op":"and","children":[{"op":"in","col":"b","value":"["1","2"]},{"op":"unsupported","reason":"Multiple ColumnRef in expression is not supported, sig=InInt"},{"op":"unsupported","reason":"Multiple ColumnRef in expression is not supported, sig=InInt"}]})raw");
+}
+CATCH
+
+TEST_F(MinMaxIndexTest, CheckNullableCmpRSResult)
+try
+{
+    auto col_type = makeNullable(std::make_shared<DataTypeInt64>());
+    auto minmax_index = std::make_shared<MinMaxIndex>(*col_type);
+
+    auto column = col_type->createColumn();
+    constexpr Int64 min_value = 1;
+    constexpr Int64 max_value = 63;
+    for (auto i = min_value; i <= max_value; i++)
+    {
+        column->insert(Field(i));
+    }
+    column->insertDefault(); // insert null value
+    minmax_index->addPack(*column, nullptr);
+
+    auto [min, max] = minmax_index->getIntMinMaxOrNull(0);
+    std::cout << min << std::endl;
+    std::cout << max << std::endl;
+    auto res = minmax_index->checkIsNull(0, 1)[0];
+    std::cout << magic_enum::enum_name(res) << std::endl;
+    res = minmax_index->checkCmp<RoughCheck::CheckGreater>(0, 1, Field(static_cast<Int64>(0)), col_type)[0];
+    ASSERT_EQ(res, RSResult::Some) << magic_enum::enum_name(res);
 }
 CATCH
 
