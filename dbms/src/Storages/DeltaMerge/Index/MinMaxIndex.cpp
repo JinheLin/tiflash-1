@@ -340,6 +340,7 @@ RSResults MinMaxIndex::checkInImpl(
     return results;
 }
 
+// Currently, only when the minimun value and the maximun value are equal can CheckIn return RSResult::All.
 RSResults MinMaxIndex::checkIn(
     size_t start_pack,
     size_t pack_count,
@@ -497,7 +498,8 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
             continue;
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
-        results[i - start_pack] = Op::template check<T>(value, type, min, max);
+        results[i - start_pack]
+            = Op::template check<T>(value, type, min, max) && (has_null_marks[i] ? RSResult::Some : RSResult::All);
     }
     return results;
 }
@@ -576,13 +578,17 @@ RSResults MinMaxIndex::checkNullableCmp(
     return results;
 }
 
+// If a pack only contains null marks and delete marks, checkIsNull will return RSResult::All.
+// This is safe because MVCC will read the tag column and the deleted rows will be filtered out.
 RSResults MinMaxIndex::checkIsNull(size_t start_pack, size_t pack_count)
 {
     RSResults results(pack_count, RSResult::None);
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
         if (has_null_marks[i])
-            results[i - start_pack] = RSResult::Some;
+        {
+            results[i - start_pack] = has_value_marks[i] ? RSResult::Some : RSResult::All;
+        }
     }
     return results;
 }
