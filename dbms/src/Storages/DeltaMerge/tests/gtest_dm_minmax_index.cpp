@@ -2405,7 +2405,9 @@ try
         {{std::nullopt, std::nullopt}, {1, 0}},
         {{std::nullopt, std::nullopt}, {1, 1}},
         {{1, 2, 3, 4}, {1, 1, 1, 1}},
-
+        {{1, 1}, {0, 0}},
+        {{1, 1}, {1, 0}},
+        {{1, 1, std::nullopt}, {0, 0, 0}},
     };
     auto minmax_index = createMinMaxIndex(*col_type, packs);
     auto expected_results = {
@@ -2417,6 +2419,9 @@ try
         RSResult::Some, // None
         RSResult::Some, // None
         RSResult::Some, // None
+        RSResult::All,
+        RSResult::Some, // All
+        RSResult::Some,
     };
     ASSERT_EQ(packs.size(), expected_results.size());
     auto actual_results = minmax_index->checkIn(
