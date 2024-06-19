@@ -266,7 +266,8 @@ RSResults MinMaxIndex::checkNullableInImpl(
         }
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
-        results[i - start_pack] = RoughCheck::CheckIn::check<T>(values, type, min, max);
+        results[i - start_pack] = RoughCheck::CheckIn::check<T>(values, type, min, max)
+            && (has_null_marks[i] ? RSResult::Some : RSResult::All);
     }
     return results;
 }

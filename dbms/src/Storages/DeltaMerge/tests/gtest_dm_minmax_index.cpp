@@ -2385,7 +2385,7 @@ try
                 RSResult::None,
                 RSResult::None,
                 RSResult::All,   // Only min-max equal can return All
-                RSResult::All,   // Should be Some
+                RSResult::Some,
             },
         },
         {
