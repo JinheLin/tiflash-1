@@ -95,24 +95,30 @@ inline std::pair<size_t, size_t> minmax(
 
 // Before v6.4.0, we used null as the minimum value.
 // Since v6.4.0, we have excluded null when calculating the maximum and minimum values.
-// If the minimum value is null, this minmax index is generated before v6.4.0.
-// For compatibility, the filter result of the corresponding pack should be Some,
-// and the upper layer will read the pack data to perform the filter calculation.
-ALWAYS_INLINE bool minIsNull(const DB::ColumnUInt8 & null_map, size_t i)
-{
-    return null_map.getElement(i * 2);
-}
-
-// Before v6.4.0, we used null as the minimum value.
-// Since v6.4.0, we have excluded null when calculating the maximum and minimum values.
 // Since v6.4.0, a minimum value would be null only when there is no value (null or deleted)
 // in this pack and the default value of this column is null.
 // Therefore, if a pack has any values, but its minimum value is null, it should be a legacy version.
 // For compatibility, the filter result of the legacy version should be Some, and the upper layer will
 // read the pack data to perform the filter calculation.
-bool isLegacy(const DB::ColumnUInt8 & null_map, const PaddedPODArray<UInt8> & has_values, size_t i)
+ALWAYS_INLINE bool isLegacy(const DB::ColumnUInt8 & null_map, const PaddedPODArray<UInt8> & has_values, size_t i)
 {
     return has_values[i] && null_map.getElement(i * 2);
+}
+
+ALWAYS_INLINE std::optional<RSResult> checkLegacyOrNoValue(
+    const DB::ColumnUInt8 & null_map,
+    const PaddedPODArray<UInt8> & has_values,
+    size_t i)
+{
+    if (isLegacy(null_map, has_values, i))
+    {
+        return RSResult::Some;
+    }
+    else if (!has_values[i])
+    {
+        return RSResult::None;
+    }
+    return std::nullopt;
 }
 } // namespace details
 
@@ -253,13 +259,9 @@ RSResults MinMaxIndex::checkNullableInImpl(
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
-        if (details::isLegacy(null_map, has_value_marks, i))
+        if (auto r = details::checkLegacyOrNoValue(null_map, has_value_marks, i); r)
         {
-            continue; // Default is RSResult::Some for legacy version.
-        }
-        if (!has_value_marks[i])
-        {
-            results[i - start_pack] = RSResult::None;
+            results[i - start_pack] = *r;
             continue;
         }
         auto min = minmaxes_data[i * 2];
@@ -305,8 +307,11 @@ RSResults MinMaxIndex::checkNullableIn(
         const auto & offsets = string_column->getOffsets();
         for (size_t i = start_pack; i < start_pack + pack_count; ++i)
         {
-            if (details::minIsNull(null_map, i))
+            if (auto r = details::checkLegacyOrNoValue(null_map, has_value_marks, i); r)
+            {
+                results[i - start_pack] = *r;
                 continue;
+            }
             size_t pos = i * 2;
             size_t prev_offset = pos == 0 ? 0 : offsets[pos - 1];
             // todo use StringRef instead of String
@@ -517,8 +522,11 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
-        if (details::minIsNull(null_map, i))
+        if (auto r = details::checkLegacyOrNoValue(null_map, has_value_marks, i); r)
+        {
+            results[i - start_pack] = *r;
             continue;
+        }
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
         results[i - start_pack] = Op::template check<T>(value, type, min, max);
@@ -563,8 +571,11 @@ RSResults MinMaxIndex::checkNullableCmp(
         const auto & offsets = string_column->getOffsets();
         for (size_t i = start_pack; i < start_pack + pack_count; ++i)
         {
-            if (details::minIsNull(null_map, i))
+            if (auto r = details::checkLegacyOrNoValue(null_map, has_value_marks, i); r)
+            {
+                results[i - start_pack] = *r;
                 continue;
+            }
             size_t pos = i * 2;
             size_t prev_offset = pos == 0 ? 0 : offsets[pos - 1];
             // todo use StringRef instead of String
