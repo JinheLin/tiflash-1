@@ -59,31 +59,29 @@ public:
 
     static MinMaxIndexPtr read(const IDataType & type, ReadBuffer & buf, size_t bytes_limit);
 
-    std::pair<Int64, Int64> getIntMinMax(size_t pack_index);
+    std::pair<Int64, Int64> getIntMinMax(size_t pack_index) const;
 
-    std::pair<std::string, std::string> getIntMinMaxOrNull(size_t pack_index);
+    std::pair<std::string, std::string> getIntMinMaxOrNull(size_t pack_index) const;
 
-    std::pair<StringRef, StringRef> getStringMinMax(size_t pack_index);
+    std::pair<StringRef, StringRef> getStringMinMax(size_t pack_index) const;
 
-    std::pair<UInt64, UInt64> getUInt64MinMax(size_t pack_index);
+    std::pair<UInt64, UInt64> getUInt64MinMax(size_t pack_index) const;
 
     template <typename Op>
-    RSResults checkCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type);
+    RSResults checkCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type) const;
 
     // TODO: merge with checkCmp
-    RSResults checkIn(
-        size_t start_pack,
-        size_t pack_count,
-        const std::vector<Field> & values,
-        const DataTypePtr & type);
+    RSResults checkIn(size_t start_pack, size_t pack_count, const std::vector<Field> & values, const DataTypePtr & type)
+        const;
 
-    RSResults checkIsNull(size_t start_pack, size_t pack_count);
+    RSResults checkIsNull(size_t start_pack, size_t pack_count) const;
 
 private:
     template <typename Op, typename T>
-    RSResults checkCmpImpl(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type);
+    RSResults checkCmpImpl(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type) const;
     template <typename Op>
-    RSResults checkNullableCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type);
+    RSResults checkNullableCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type)
+        const;
     template <typename Op, typename T>
     RSResults checkNullableCmpImpl(
         const DB::ColumnNullable & column_nullable,
@@ -91,19 +89,19 @@ private:
         size_t start_pack,
         size_t pack_count,
         const Field & value,
-        const DataTypePtr & type);
+        const DataTypePtr & type) const;
 
     template <typename T>
     RSResults checkInImpl(
         size_t start_pack,
         size_t pack_count,
         const std::vector<Field> & values,
-        const DataTypePtr & type);
+        const DataTypePtr & type) const;
     RSResults checkNullableIn(
         size_t start_pack,
         size_t pack_count,
         const std::vector<Field> & values,
-        const DataTypePtr & type);
+        const DataTypePtr & type) const;
     template <typename T>
     RSResults checkNullableInImpl(
         const DB::ColumnNullable & column_nullable,
@@ -111,7 +109,7 @@ private:
         size_t start_pack,
         size_t pack_count,
         const std::vector<Field> & values,
-        const DataTypePtr & type);
+        const DataTypePtr & type) const;
 
     PaddedPODArray<UInt8> has_null_marks;
     PaddedPODArray<UInt8> has_value_marks;

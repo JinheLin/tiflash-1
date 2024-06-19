@@ -29,6 +29,9 @@
 #include <Storages/DeltaMerge/Index/MinMaxIndex.h>
 #include <Storages/DeltaMerge/Index/RoughCheck.h>
 
+#include "Storages/DeltaMerge/Index/RSResult.h"
+#include "common/defines.h"
+
 namespace DB::DM
 {
 
@@ -98,6 +101,18 @@ inline std::pair<size_t, size_t> minmax(
 ALWAYS_INLINE bool minIsNull(const DB::ColumnUInt8 & null_map, size_t i)
 {
     return null_map.getElement(i * 2);
+}
+
+// Before v6.4.0, we used null as the minimum value.
+// Since v6.4.0, we have excluded null when calculating the maximum and minimum values.
+// Since v6.4.0, a minimum value would be null only when there is no value (null or deleted)
+// in this pack and the default value of this column is null.
+// Therefore, if a pack has any values, but its minimum value is null, it should be a legacy version.
+// For compatibility, the filter result of the legacy version should be Some, and the upper layer will
+// read the pack data to perform the filter calculation.
+bool isLegacy(const DB::ColumnUInt8 & null_map, const PaddedPODArray<UInt8> & has_values, size_t i)
+{
+    return has_values[i] && null_map.getElement(i * 2);
 }
 } // namespace details
 
@@ -199,12 +214,12 @@ MinMaxIndexPtr MinMaxIndex::read(const IDataType & type, ReadBuffer & buf, size_
     return std::make_shared<MinMaxIndex>(std::move(has_null_marks), std::move(has_value_marks), std::move(minmaxes));
 }
 
-std::pair<Int64, Int64> MinMaxIndex::getIntMinMax(size_t pack_index)
+std::pair<Int64, Int64> MinMaxIndex::getIntMinMax(size_t pack_index) const
 {
     return {minmaxes->getInt(pack_index * 2), minmaxes->getInt(pack_index * 2 + 1)};
 }
 
-std::pair<std::string, std::string> MinMaxIndex::getIntMinMaxOrNull(size_t pack_index)
+std::pair<std::string, std::string> MinMaxIndex::getIntMinMaxOrNull(size_t pack_index) const
 {
     std::string min, max;
     Field min_field, max_field;
@@ -215,12 +230,12 @@ std::pair<std::string, std::string> MinMaxIndex::getIntMinMaxOrNull(size_t pack_
     return {min, max};
 }
 
-std::pair<StringRef, StringRef> MinMaxIndex::getStringMinMax(size_t pack_index)
+std::pair<StringRef, StringRef> MinMaxIndex::getStringMinMax(size_t pack_index) const
 {
     return {minmaxes->getDataAt(pack_index * 2), minmaxes->getDataAt(pack_index * 2 + 1)};
 }
 
-std::pair<UInt64, UInt64> MinMaxIndex::getUInt64MinMax(size_t pack_index)
+std::pair<UInt64, UInt64> MinMaxIndex::getUInt64MinMax(size_t pack_index) const
 {
     return {minmaxes->get64(pack_index * 2), minmaxes->get64(pack_index * 2 + 1)};
 }
@@ -232,14 +247,21 @@ RSResults MinMaxIndex::checkNullableInImpl(
     size_t start_pack,
     size_t pack_count,
     const std::vector<Field> & values,
-    const DataTypePtr & type)
+    const DataTypePtr & type) const
 {
     RSResults results(pack_count, RSResult::Some);
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
-        if (details::minIsNull(null_map, i))
+        if (details::isLegacy(null_map, has_value_marks, i))
+        {
+            continue; // Default is RSResult::Some for legacy version.
+        }
+        if (!has_value_marks[i])
+        {
+            results[i - start_pack] = RSResult::None;
             continue;
+        }
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
         results[i - start_pack] = RoughCheck::CheckIn::check<T>(values, type, min, max);
@@ -251,7 +273,7 @@ RSResults MinMaxIndex::checkNullableIn(
     size_t start_pack,
     size_t pack_count,
     const std::vector<Field> & values,
-    const DataTypePtr & type)
+    const DataTypePtr & type) const
 {
     const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
     const auto & null_map = column_nullable.getNullMapColumn();
@@ -325,7 +347,7 @@ RSResults MinMaxIndex::checkInImpl(
     size_t start_pack,
     size_t pack_count,
     const std::vector<Field> & values,
-    const DataTypePtr & type)
+    const DataTypePtr & type) const
 {
     RSResults results(pack_count, RSResult::None);
     const auto & minmaxes_data = toColumnVectorData<T>(minmaxes);
@@ -344,7 +366,7 @@ RSResults MinMaxIndex::checkIn(
     size_t start_pack,
     size_t pack_count,
     const std::vector<Field> & values,
-    const DataTypePtr & type)
+    const DataTypePtr & type) const
 {
     RSResults results(pack_count, RSResult::None);
 
@@ -397,6 +419,7 @@ RSResults MinMaxIndex::checkIn(
 
 template <typename Op, typename T>
 RSResults MinMaxIndex::checkCmpImpl(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type)
+    const
 {
     RSResults results(pack_count, RSResult::None);
     const auto & minmaxes_data = toColumnVectorData<T>(minmaxes);
@@ -413,6 +436,7 @@ RSResults MinMaxIndex::checkCmpImpl(size_t start_pack, size_t pack_count, const 
 
 template <typename Op>
 RSResults MinMaxIndex::checkCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type)
+    const
 {
     RSResults results(pack_count, RSResult::None);
     if (value.isNull())
@@ -468,17 +492,17 @@ template RSResults MinMaxIndex::checkCmp<RoughCheck::CheckEqual>(
     size_t start_pack,
     size_t pack_count,
     const Field & value,
-    const DataTypePtr & type);
+    const DataTypePtr & type) const;
 template RSResults MinMaxIndex::checkCmp<RoughCheck::CheckGreater>(
     size_t start_pack,
     size_t pack_count,
     const Field & value,
-    const DataTypePtr & type);
+    const DataTypePtr & type) const;
 template RSResults MinMaxIndex::checkCmp<RoughCheck::CheckGreaterEqual>(
     size_t start_pack,
     size_t pack_count,
     const Field & value,
-    const DataTypePtr & type);
+    const DataTypePtr & type) const;
 
 template <typename Op, typename T>
 RSResults MinMaxIndex::checkNullableCmpImpl(
@@ -487,7 +511,7 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
     size_t start_pack,
     size_t pack_count,
     const Field & value,
-    const DataTypePtr & type)
+    const DataTypePtr & type) const
 {
     RSResults results(pack_count, RSResult::Some);
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
@@ -507,7 +531,7 @@ RSResults MinMaxIndex::checkNullableCmp(
     size_t start_pack,
     size_t pack_count,
     const Field & value,
-    const DataTypePtr & type)
+    const DataTypePtr & type) const
 {
     const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
     const auto & null_map = column_nullable.getNullMapColumn();
@@ -578,7 +602,7 @@ RSResults MinMaxIndex::checkNullableCmp(
 
 // If a pack only contains null marks and delete marks, checkIsNull will return RSResult::All.
 // This is safe because MVCC will read the tag column and the deleted rows will be filtered out.
-RSResults MinMaxIndex::checkIsNull(size_t start_pack, size_t pack_count)
+RSResults MinMaxIndex::checkIsNull(size_t start_pack, size_t pack_count) const
 {
     RSResults results(pack_count, RSResult::None);
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)

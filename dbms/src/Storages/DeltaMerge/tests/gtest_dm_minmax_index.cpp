@@ -2378,18 +2378,33 @@ try
             .results = {
                 RSResult::Some,
                 RSResult::Some,
-                RSResult::Some,  // Should be None
-                RSResult::Some,  // Should be All
+                RSResult::None,
+                RSResult::Some,  // Should be All, but not support now
                 RSResult::Some,
-                RSResult::Some,  // Should be None
-                RSResult::Some,  // Should be None
-                RSResult::Some,  // Should be None
+                RSResult::None,
+                RSResult::None,
+                RSResult::None,
                 RSResult::All,   // Only min-max equal can return All
                 RSResult::All,   // Should be Some
             },
         },
         {
             .values = {100L},
+            .results = {
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            RSResult::None,
+            },
+        },
+        {
+            .values = {0L},
             .results = {
             RSResult::None,
             RSResult::None,
