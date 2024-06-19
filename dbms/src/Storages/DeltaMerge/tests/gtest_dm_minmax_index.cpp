@@ -80,8 +80,7 @@ Attr pkAttr()
     return Attr{col.name, col.id, col.type};
 }
 
-
-bool checkMatch(
+size_t readRows(
     const String & test_case,
     Context & context,
     const String & type,
@@ -151,7 +150,19 @@ bool checkMatch(
     auto rows = getInputStreamNRows(streams[0]);
     store->drop();
 
-    return rows != 0;
+    return rows;
+}
+
+bool checkMatch(
+    const String & test_case,
+    Context & context,
+    const String & type,
+    const CSVTuples block_tuples,
+    const RSOperatorPtr & filter,
+    bool is_common_handle = false,
+    bool check_pk = false)
+{
+    return readRows(test_case, context, type, block_tuples, filter, is_common_handle, check_pk) != 0;
 }
 
 bool checkMatch(
@@ -1314,6 +1325,11 @@ try
 }
 CATCH
 
+String debugString (const std::pair<String, CSVTuples> & type_value_pair, RSOperator & rs_filter, size_t read_rows) {
+    return fmt::format("type={}, block_tuples={}, rs_filter={}, read_rows={}",
+        type_value_pair.first, type_value_pair.second, rs_filter.toDebugString(), read_rows);
+};
+
 TEST_F(MinMaxIndexTest, Not)
 try
 {
@@ -1356,17 +1372,17 @@ try
                     continue;
                 }
                 auto type_value_pair = generateTypeValue(static_cast<MinMaxTestDatatype>(datatype), true);
-                ASSERT_EQ(
-                    false,
-                    checkMatch(
+                auto rs_filter = createNot(generateRSOperator(
+                            static_cast<MinMaxTestDatatype>(datatype),
+                            static_cast<MinMaxTestOperator>(operater_type),
+                            true));
+                auto read_rows = readRows(
                         case_name,
                         *context,
                         type_value_pair.first,
                         type_value_pair.second,
-                        createNot(generateRSOperator(
-                            static_cast<MinMaxTestDatatype>(datatype),
-                            static_cast<MinMaxTestOperator>(operater_type),
-                            true))));
+                        rs_filter);
+                ASSERT_EQ(read_rows, 0) << debugString(type_value_pair, *rs_filter, read_rows);
                 ASSERT_EQ(
                     true,
                     checkMatch(
