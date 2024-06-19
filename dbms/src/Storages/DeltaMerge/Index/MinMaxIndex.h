@@ -70,7 +70,10 @@ public:
     template <typename Op>
     RSResults checkCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type) const;
 
-    // TODO: merge with checkCmp
+    // In the current implementation, checkIn can return RSResult::All only when the minimum and maximum values are equal.
+    // TODO: Dictionary encoding may help.
+    // TODO: There are many duplicates in the code of nullable and not nullable.
+    // TODO: Avoid copying when checking columns of string type.
     RSResults checkIn(size_t start_pack, size_t pack_count, const std::vector<Field> & values, const DataTypePtr & type)
         const;
 

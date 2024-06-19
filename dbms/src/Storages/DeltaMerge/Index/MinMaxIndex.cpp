@@ -114,7 +114,7 @@ ALWAYS_INLINE std::optional<RSResult> checkLegacyOrNoValue(
     {
         return RSResult::Some;
     }
-    else if (!has_values[i])
+    if (!has_values[i])
     {
         return RSResult::None;
     }
@@ -280,8 +280,6 @@ RSResults MinMaxIndex::checkNullableIn(
 {
     const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
     const auto & null_map = column_nullable.getNullMapColumn();
-
-    RSResults results(pack_count, RSResult::Some);
     const auto * raw_type = type.get();
 
 #define DISPATCH(TYPE)                                 \
@@ -301,6 +299,7 @@ RSResults MinMaxIndex::checkNullableIn(
             values,
             type);
     }
+    RSResults results(pack_count, RSResult::Some);
     if (typeid_cast<const DataTypeString *>(raw_type))
     {
         const auto * string_column = checkAndGetColumn<ColumnString>(column_nullable.getNestedColumnPtr().get());
@@ -320,7 +319,8 @@ RSResults MinMaxIndex::checkNullableIn(
             pos = i * 2 + 1;
             prev_offset = offsets[pos - 1];
             auto max = String(chars[prev_offset], offsets[pos] - prev_offset - 1);
-            results[i - start_pack] = RoughCheck::CheckIn::check<String>(values, type, min, max);
+            results[i - start_pack] = RoughCheck::CheckIn::check<String>(values, type, min, max)
+                && (has_null_marks[i] ? RSResult::Some : RSResult::All);
         }
         return results;
     }
@@ -374,13 +374,15 @@ RSResults MinMaxIndex::checkIn(
     const std::vector<Field> & values,
     const DataTypePtr & type) const
 {
-    RSResults results(pack_count, RSResult::None);
-
+    // Check nullable column.
     const auto * raw_type = type.get();
     if (typeid_cast<const DataTypeNullable *>(raw_type))
     {
         return checkNullableIn(start_pack, pack_count, values, removeNullable(type));
     }
+
+    // Check not nullable column.
+    RSResults results(pack_count, RSResult::None);
 #define DISPATCH(TYPE)                                 \
     if (typeid_cast<const DataType##TYPE *>(raw_type)) \
         return checkInImpl<TYPE>(start_pack, pack_count, values, type);
