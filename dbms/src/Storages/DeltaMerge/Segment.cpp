@@ -3173,7 +3173,8 @@ BlockInputStreamPtr Segment::getLateMaterializationStream(
         segment_snap->delta,
         filter_columns,
         this->rowkey_range,
-        ReadTag::LMFilter); /*predicate_filter TODO*/
+        ReadTag::LMFilter,
+        /*predicate_filter TODO*/ nullptr);
 
     if (unlikely(filter_columns->size() == columns_to_read.size()))
     {
