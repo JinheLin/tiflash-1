@@ -45,6 +45,11 @@ Block LateMaterializationBlockInputStream::read()
     while (true)
     {
         filter_column_block = filter_column_stream->read(filter, true);
+        
+        if (filter)
+            std::cout << "LM: " << filter_column_block.rows() << " " << countBytesInFilter(*filter) << std::endl;
+        else
+            std::cout << "LM: " << filter_column_block.rows() << " All" << std::endl;
 
         // If filter_column_block is empty, it means that the stream has ended.
         // No need to read the rest_column_stream, just return an empty block.

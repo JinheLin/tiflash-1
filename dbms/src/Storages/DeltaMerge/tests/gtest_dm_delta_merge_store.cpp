@@ -42,8 +42,12 @@
 #include <future>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <random>
-
+#include <Debug/dbgQueryCompiler.h>
+#include <Flash/Statistics/traverseExecutors.h>
+#include <Flash/Coprocessor/DAGQueryInfo.h>
+#include <Storages/DeltaMerge/FilterParser/FilterParser.h>
 namespace DB
 {
 
@@ -3960,6 +3964,175 @@ TEST_P(DeltaMergeStoreRWTest, DupHandleVersionAndDeltaIndexAdvancedThanSnapshot)
 try
 {
     dupHandleVersionAndDeltaIndexAdvancedThanSnapshot();
+}
+CATCH
+
+DM::PushDownFilterPtr generatePushDownFilter(
+    Context & ctx,
+    const String & table_info_json,
+    const String & query,
+    const std::optional<TimezoneInfo> & opt_timezone_info = std::nullopt)
+{
+    try
+    {
+        registerFunctions();
+    }
+    catch (DB::Exception &)
+    {
+        // Maybe another test has already registed, ignore exception here.
+    }
+    auto log = Logger::get("generatePushDownFilter");
+    const auto & timezone_info = opt_timezone_info ? *opt_timezone_info : TiFlashTestEnv::getContext()->getTimezoneInfo();
+    const TiDB::TableInfo table_info(table_info_json, NullspaceID);
+    QueryTasks query_tasks;
+    std::tie(query_tasks, std::ignore) = compileQuery(
+        ctx,
+        query,
+        [&](const String &, const String &) { return table_info; },
+        getDAGProperties(""));
+    auto & dag_request = *query_tasks[0].dag_request;
+    DAGContext dag_context(dag_request, {}, NullspaceID, "", DAGRequestKind::Cop, "", 0, "", log);
+    ctx.setDAGContext(&dag_context);
+    // Don't care about regions information in this test
+    google::protobuf::RepeatedPtrField<tipb::Expr> empty_condition;
+    // Push down all filters
+    const google::protobuf::RepeatedPtrField<tipb::Expr> & conditions = empty_condition;
+    google::protobuf::RepeatedPtrField<tipb::Expr> pushed_down_filters;
+    traverseExecutors(&dag_request, [&](const tipb::Executor & executor) {
+        if (executor.has_selection())
+        {
+            pushed_down_filters = executor.selection().conditions();
+            return false;
+        }
+        return true;
+    });
+
+    std::unique_ptr<DAGQueryInfo> dag_query;
+    DM::ColumnDefines columns_to_read;
+    columns_to_read.reserve(table_info.columns.size());
+    {
+        for (const auto & column : table_info.columns)
+        {
+            columns_to_read.push_back(DM::ColumnDefine(column.id, column.name, getDataTypeByColumnInfo(column)));
+        }
+        dag_query = std::make_unique<DAGQueryInfo>(
+            conditions,
+            pushed_down_filters,
+            table_info.columns,
+            std::vector<int>(), // don't care runtime filter
+            0,
+            timezone_info);
+    }
+
+    auto create_attr_by_column_id = [&columns_to_read](ColumnID column_id) -> DM::Attr {
+        auto iter = std::find_if(
+            columns_to_read.begin(),
+            columns_to_read.end(),
+            [column_id](const DM::ColumnDefine & d) -> bool { return d.id == column_id; });
+        if (iter != columns_to_read.end())
+            return DM::Attr{.col_name = iter->name, .col_id = iter->id, .type = iter->type};
+        // Maybe throw an exception? Or check if `type` is nullptr before creating filter?
+        return DM::Attr{.col_name = "", .col_id = column_id, .type = DataTypePtr{}};
+    };
+
+    auto rs_operator
+        = DM::FilterParser::parseDAGQuery(*dag_query, table_info.columns, std::move(create_attr_by_column_id), log);
+    auto push_down_filter
+        = DM::PushDownFilter::build(rs_operator, table_info.columns, pushed_down_filters, columns_to_read, ctx, log);
+    return push_down_filter;
+}
+
+TEST_P(DeltaMergeStoreRWTest, PushDownFilter)
+try
+{
+    const ColumnDefine col_str_define(2, "str", std::make_shared<DataTypeString>());
+    const ColumnDefine col_i32_define(3, "i32", std::make_shared<DataTypeInt32>());
+    auto table_column_defines = DMTestEnv::getDefaultColumns();
+    table_column_defines->emplace_back(col_str_define);
+    table_column_defines->emplace_back(col_i32_define);
+    dropDataOnDisk(getTemporaryPath());
+    store = reload(table_column_defines);
+
+    constexpr size_t num_rows_write = 128;
+    auto block = DMTestEnv::prepareSimpleWriteBlock(0, num_rows_write, false);
+    // Add a column of str:String for test
+    block.insert(DB::tests::createColumn<String>(
+        createNumberStrings(0, num_rows_write),
+        col_str_define.name,
+        col_str_define.id));
+    // Add a column of i32:Int32 for test
+    block.insert(DB::tests::createColumn<Int32>(
+        createNumbers<Int64>(0, num_rows_write),
+        col_i32_define.name,
+        col_i32_define.id));
+    
+    auto local_settings = db_context->getSettingsRef();
+    local_settings.dt_segment_stable_pack_rows = 1;
+    auto local_context = TiFlashTestEnv::getContext(local_settings);
+
+    store->write(*local_context, local_context->getSettingsRef(), block);
+    store->flushCache(*local_context, RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize()));
+    store->mergeDeltaAll(*local_context);
+    for (const auto & cd : store->getTableColumns())
+    {
+        std::cout << cd.id << " " << cd.name << " " << cd.type->getName() << std::endl;
+    }
+
+    const String table_info_json = R"json({
+    "cols":[
+        {
+            "comment":"","default":null,"default_bit":null,"id":2,
+            "name":{"L":"str","O":"str"},"offset":-1,"origin_default":null,"state":0,
+            "type":{"Charset":null,"Collate":null,"Decimal":0,"Elems":null,"Flag":4097,"Flen":0,"Tp":254}
+        },
+        {
+            "comment":"","default":null,"default_bit":null,"id":3,
+            "name":{"L":"i32","O":"i32"},"offset":-1,"origin_default":null,"state":0,
+            "type":{"Charset":null,"Collate":null,"Decimal":0,"Elems":null,"Flag":4097,"Flen":0,"Tp":8}
+        }
+    ],
+    "pk_is_handle":false,"index_info":[],"is_common_handle":false,
+    "name":{"L":"t_111","O":"t_111"},"partition":null,
+    "comment":"Mocked.","id":30,"schema_version":-1,"state":0,"tiflash_replica":{"Count":0},"update_timestamp":1636471547239654
+})json";
+
+    auto push_down_filter = generatePushDownFilter(*local_context, table_info_json, "select str, i32 from default.t_111 where str = '100'");
+    ASSERT_NE(push_down_filter, nullptr);
+    ASSERT_NE(push_down_filter->before_where, nullptr);
+    auto in = store->read(
+        *local_context,
+        local_context->getSettingsRef(),
+        store->getTableColumns(),
+        {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+        /* num_streams= */ 1,
+        /* start_ts= */ std::numeric_limits<UInt64>::max(),
+        push_down_filter,
+        std::vector<RuntimeFilterPtr>{},
+        0,
+        TRACING_NAME,
+        /* keep_order= */ false,
+        /* is_fast_scan= */ false,
+        /* expected_block_size= */1)[0];
+    
+    while (true)
+    {
+        auto b = in->read();
+        if (!b)
+            break;
+        
+        std::cout << b.rows() << std::endl;
+        const auto & str_col = *(b.getByName("str").column);
+        const auto & i32_col = *(b.getByName("i32").column);
+        ASSERT_EQ(str_col.size(), i32_col.size());
+
+        for (size_t i = 0; i < str_col.size(); ++i)
+        {
+            const auto & str = str_col[i].get<String>();
+            const auto & i32 = i32_col[i].get<Int32>();
+            std::cout << str << " " << i32 << std::endl;
+            ASSERT_EQ(std::stoi(str), i32);
+        }
+    }
 }
 CATCH
 

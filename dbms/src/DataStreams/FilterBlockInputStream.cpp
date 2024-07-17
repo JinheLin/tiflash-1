@@ -52,6 +52,7 @@ Block FilterBlockInputStream::readImpl(FilterPtr & res_filter, bool return_filte
     if (filter_transform_action.alwaysFalse())
         return res;
 
+    std::cout << "Filter start" << std::endl;
     /// Until non-empty block after filtering or end of stream.
     while (true)
     {
@@ -60,11 +61,20 @@ Block FilterBlockInputStream::readImpl(FilterPtr & res_filter, bool return_filte
         // so we call read() here.
         res = children.back()->read();
 
+        std::cout << "Filter read: " << res.rows() << std::endl;
+
         if (!res)
             return res;
 
         if (filter_transform_action.transform(res, res_filter, return_filter))
+        {
+            std::cout << "Filter trans true: " << res.rows() << std::endl;
             return res;
+        }
+        else
+        {
+            std::cout << "Filter trans false" << std::endl;
+        }
     }
 }
 
