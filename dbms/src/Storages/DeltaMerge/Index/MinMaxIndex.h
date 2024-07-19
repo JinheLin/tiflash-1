@@ -67,6 +67,8 @@ public:
 
     std::pair<UInt64, UInt64> getUInt64MinMax(size_t pack_index);
 
+    size_t getPackCount() const { return minmaxes->size() / 2; }
+
     template <typename Op>
     RSResults checkCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type);
 

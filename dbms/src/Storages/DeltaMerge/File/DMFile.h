@@ -33,6 +33,19 @@ int migrateServiceMain(DB::Context & context, const MigrateArgs & args);
 
 namespace DB::DM
 {
+class MinMaxIndex;
+using MinMaxIndexPtr = std::shared_ptr<MinMaxIndex>;
+} // namespace DB::DM
+namespace DTTool::Analyze
+{
+DB::DM::MinMaxIndexPtr loadIndex(
+    const DB::DM::DMFilePtr & dmfile,
+    const DB::FileProviderPtr & file_provider,
+    DB::DM::ColId col_id);
+}
+
+namespace DB::DM
+{
 namespace tests
 {
 class DMFileTest;
@@ -298,6 +311,10 @@ private:
         const ::DTTool::Migrate::MigrateArgs & args);
     friend bool ::DTTool::Migrate::isRecognizable(const DB::DM::DMFile & file, const std::string & target);
     friend bool ::DTTool::Migrate::needFrameMigration(const DB::DM::DMFile & file, const std::string & target);
+    friend MinMaxIndexPtr DTTool::Analyze::loadIndex(
+        const DMFilePtr & dmfile,
+        const FileProviderPtr & file_provider,
+        ColId col_id);
 };
 
 } // namespace DB::DM

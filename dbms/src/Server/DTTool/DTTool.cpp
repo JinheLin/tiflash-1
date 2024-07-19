@@ -83,6 +83,12 @@ int mainEntryTiFlashDTTool(int argc, char ** argv)
             opts.erase(opts.begin());
             return Inspect::inspectEntry(opts, run_raftstore_proxy_ffi);
         }
+        else if (command == "analyze")
+        {
+            std::vector<std::string> opts = bpo::collect_unrecognized(parsed.options, bpo::include_positional);
+            opts.erase(opts.begin());
+            DTTool::Analyze::entry(opts);
+        }
         else
         {
             std::cerr << "unrecognized subcommand, type `help` to see the help message" << std::endl;
