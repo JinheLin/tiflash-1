@@ -82,6 +82,13 @@ void DMFilePackFilter::init(ReadTag read_tag)
             pack_res.begin(),
             [](RSResult a, RSResult b) { return a && b; });
     }
+    else
+    {
+        std::transform(pack_res.cbegin(), pack_res.cend(), pack_res.begin(), [](RSResult a) {
+            return a && RSResult::Some;
+        });
+    }
+
     auto [none_count, some_count, all_count, all_null_count] = countPackRes();
     auto after_filter = some_count + all_count + all_null_count;
     ProfileEvents::increment(ProfileEvents::DMFileFilterAftRoughSet, after_filter);
@@ -108,7 +115,8 @@ void DMFilePackFilter::init(ReadTag read_tag)
     LOG_DEBUG(
         log,
         "RSFilter exclude rate: {:.2f}, after_pk: {}, after_read_packs: {}, after_filter: {}, handle_ranges: {}"
-        ", read_packs: {}, pack_count: {}, none_count: {}, some_count: {}, all_count: {}, all_null_count: {}, read_tag: {}",
+        ", read_packs: {}, pack_count: {}, none_count: {}, some_count: {}, all_count: {}, all_null_count: {}, "
+        "read_tag: {}",
         ((after_read_packs == 0) ? std::numeric_limits<double>::quiet_NaN() : filter_rate),
         after_pk,
         after_read_packs,
