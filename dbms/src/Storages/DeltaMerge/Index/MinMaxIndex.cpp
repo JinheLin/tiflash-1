@@ -245,8 +245,8 @@ RSResults MinMaxIndex::checkNullableInImpl(
             continue;
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
-        auto value_result = RoughCheck::CheckIn::check<T>(values, type, min, max);
-        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+        auto hit_state = RoughCheck::CheckIn::check<T>(values, type, min, max);
+        results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -296,8 +296,8 @@ RSResults MinMaxIndex::checkNullableIn(
             pos = i * 2 + 1;
             prev_offset = offsets[pos - 1];
             auto max = String(chars[prev_offset], offsets[pos] - prev_offset - 1);
-            auto value_result = RoughCheck::CheckIn::check<String>(values, type, min, max);
-            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+            auto hit_state = RoughCheck::CheckIn::check<String>(values, type, min, max);
+            results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
         }
         return results;
     }
@@ -340,8 +340,8 @@ RSResults MinMaxIndex::checkInImpl(
             continue;
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
-        auto value_result = RoughCheck::CheckIn::check<T>(values, type, min, max);
-        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+        auto hit_state = RoughCheck::CheckIn::check<T>(values, type, min, max);
+        results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -389,8 +389,8 @@ RSResults MinMaxIndex::checkIn(
             pos = i * 2 + 1;
             prev_offset = offsets[pos - 1];
             auto max = String(reinterpret_cast<const char *>(&chars[prev_offset]), offsets[pos] - prev_offset - 1);
-            auto value_result = RoughCheck::CheckIn::check<String>(values, type, min, max);
-            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+            auto hit_state = RoughCheck::CheckIn::check<String>(values, type, min, max);
+            results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
         }
         return results;
     }
@@ -413,8 +413,8 @@ RSResults MinMaxIndex::checkCmpImpl(size_t start_pack, size_t pack_count, const 
             continue;
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
-        auto value_result = Op::template check<T>(value, type, min, max);
-        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+        auto hit_state = Op::template check<T>(value, type, min, max);
+        results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -460,8 +460,8 @@ RSResults MinMaxIndex::checkCmp(size_t start_pack, size_t pack_count, const Fiel
             pos = i * 2 + 1;
             prev_offset = offsets[pos - 1];
             auto max = String(reinterpret_cast<const char *>(&chars[prev_offset]), offsets[pos] - prev_offset - 1);
-            auto value_result = Op::template check<String>(value, type, min, max);
-            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+            auto hit_state = Op::template check<String>(value, type, min, max);
+            results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
         }
         return results;
     }
@@ -506,8 +506,8 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
             continue;
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
-        auto value_result = Op::template check<T>(value, type, min, max);
-        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+        auto hit_state = Op::template check<T>(value, type, min, max);
+        results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -558,8 +558,8 @@ RSResults MinMaxIndex::checkNullableCmp(
             pos = i * 2 + 1;
             prev_offset = offsets[pos - 1];
             auto max = String(chars[prev_offset], offsets[pos] - prev_offset - 1);
-            auto value_result = Op::template check<String>(value, type, min, max);
-            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
+            auto hit_state = Op::template check<String>(value, type, min, max);
+            results[i - start_pack] = RSResult(hit_state, has_null_marks[i]);
         }
         return results;
     }

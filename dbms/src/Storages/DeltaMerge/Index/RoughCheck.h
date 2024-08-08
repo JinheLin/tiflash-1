@@ -42,10 +42,10 @@ using Cmp = ValueComparision<Op>;
 struct CheckEqual
 {
     template <typename T>
-    static RSResult check(const Field & v, const DataTypePtr & type, const T & min, const T & max)
+    static RSResult::HitState check(const Field & v, const DataTypePtr & type, const T & min, const T & max)
     {
         if (!IS_LEGAL(v, min))
-            return RSResultConst::Some;
+            return RSResult::HitState::Some;
 
         //    if (min == max && v == min)
         //        return All;
@@ -55,23 +55,27 @@ struct CheckEqual
         //        return None;
 
         if (min == max && EQUAL(v, min))
-            return RSResultConst::All;
+            return RSResult::HitState::All;
         else if (GREATER_EQ(v, min) && LESS_EQ(v, max))
-            return RSResultConst::Some;
+            return RSResult::HitState::Some;
         else
-            return RSResultConst::None;
+            return RSResult::HitState::None;
     }
 };
 
 struct CheckIn
 {
     template <typename T>
-    static RSResult check(const std::vector<Field> & values, const DataTypePtr & type, const T & min, const T & max)
+    static RSResult::HitState check(
+        const std::vector<Field> & values,
+        const DataTypePtr & type,
+        const T & min,
+        const T & max)
     {
-        RSResult result = RSResultConst::None;
+        RSResult::HitState result = RSResult::HitState::None;
         for (const auto & v : values)
         {
-            if (result == RSResultConst::All)
+            if (result == RSResult::HitState::All)
                 break;
             // skip null value
             if (v.isNull())
@@ -85,10 +89,10 @@ struct CheckIn
 struct CheckGreater
 {
     template <typename T>
-    static RSResult check(const Field & v, const DataTypePtr & type, const T & min, const T & max)
+    static RSResult::HitState check(const Field & v, const DataTypePtr & type, const T & min, const T & max)
     {
         if (!IS_LEGAL(v, min))
-            return RSResultConst::Some;
+            return RSResult::HitState::Some;
 
         //    if (v >= max)
         //        return None;
@@ -97,21 +101,21 @@ struct CheckGreater
         //    return Some;
 
         if (GREATER_EQ(v, max))
-            return RSResultConst::None;
+            return RSResult::HitState::None;
         else if (LESS(v, min))
-            return RSResultConst::All;
+            return RSResult::HitState::All;
         else
-            return RSResultConst::Some;
+            return RSResult::HitState::Some;
     }
 };
 
 struct CheckGreaterEqual
 {
     template <typename T>
-    static RSResult check(const Field & v, const DataTypePtr & type, T min, T max)
+    static RSResult::HitState check(const Field & v, const DataTypePtr & type, T min, T max)
     {
         if (!IS_LEGAL(v, min))
-            return RSResultConst::Some;
+            return RSResult::HitState::Some;
 
         //    if (v > max)
         //        return None;
@@ -120,11 +124,11 @@ struct CheckGreaterEqual
         //    return Some;
 
         if (GREATER(v, max))
-            return RSResultConst::None;
+            return RSResult::HitState::None;
         else if (LESS_EQ(v, min))
-            return RSResultConst::All;
+            return RSResult::HitState::All;
         else
-            return RSResultConst::Some;
+            return RSResult::HitState::Some;
     }
 };
 

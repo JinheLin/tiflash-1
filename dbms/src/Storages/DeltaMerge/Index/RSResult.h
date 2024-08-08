@@ -42,12 +42,6 @@ public:
 
     HitState hit_state;
 
-    RSResult()
-        : has_null(false)
-        , hit_state(HitState::Unknown)
-
-    {}
-
     RSResult(HitState hit_state_, bool has_null_)
         : has_null(has_null_)
         , hit_state(hit_state_)
@@ -55,8 +49,7 @@ public:
 
     RSResult operator||(const RSResult & other) const
     {
-        if (unlikely(hit_state == HitState::Unknown || other.hit_state == HitState::Unknown))
-            throw Exception("Unexpected Unknown");
+        RUNTIME_CHECK(hit_state != HitState::Unknown || other.hit_state != HitState::Unknown);
 
         if (hit_state == HitState::All || other.hit_state == HitState::All)
             return RSResult(HitState::All, has_null || other.has_null);
@@ -69,8 +62,7 @@ public:
 
     RSResult operator&&(const RSResult & other) const
     {
-        if (unlikely(hit_state == HitState::Unknown || other.hit_state == HitState::Unknown))
-            throw Exception("Unexpected Unknown");
+        RUNTIME_CHECK(hit_state != HitState::Unknown || other.hit_state != HitState::Unknown);
 
         if (hit_state == HitState::None || other.hit_state == HitState::None)
             return RSResult(HitState::None, has_null || other.has_null);
@@ -116,7 +108,44 @@ public:
     bool needToRead() const { return hit_state != HitState::None; }
 
     bool needToFilter() const { return hit_state == HitState::All && !has_null; }
+
+    void setNotNeedToRead() { hit_state = HitState::None; }
 };
+
+inline RSResult::HitState operator||(RSResult::HitState v0, RSResult::HitState v1)
+{
+    RUNTIME_CHECK(v0 != RSResult::HitState::Unknown || v1 != RSResult::HitState::Unknown);
+    if (v0 == RSResult::HitState::All || v1 == RSResult::HitState::All)
+        return RSResult::HitState::All;
+    if (v0 == RSResult::HitState::Some || v1 == RSResult::HitState::Some)
+        return RSResult::HitState::Some;
+    return RSResult::HitState::None;
+}
+
+inline RSResult::HitState operator&&(RSResult::HitState v0, RSResult::HitState v1)
+{
+    RUNTIME_CHECK(v0 != RSResult::HitState::Unknown || v1 != RSResult::HitState::Unknown);
+    if (v0 == RSResult::HitState::None || v1 == RSResult::HitState::None)
+        return RSResult::HitState::None;
+    if (v0 == RSResult::HitState::All && v1 == RSResult::HitState::All)
+        return RSResult::HitState::All;
+    return RSResult::HitState::Some;
+}
+
+inline RSResult::HitState operator!(RSResult::HitState v)
+{
+    switch (v)
+    {
+    case RSResult::HitState::Some:
+        return RSResult::HitState::Some;
+    case RSResult::HitState::None:
+        return RSResult::HitState::All;
+    case RSResult::HitState::All:
+        return RSResult::HitState::None;
+    default:
+        throw Exception("Unexpected Unknown");
+    }
+}
 
 namespace RSResultConst
 {

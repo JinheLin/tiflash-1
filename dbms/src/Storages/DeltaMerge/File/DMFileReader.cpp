@@ -172,7 +172,7 @@ Block DMFileReader::readWithFilter(const IColumn::Filter & filter)
         return {};
     }
 
-    /// 2. Mark pack_res[i] = None if all rows in the i-th pack are filtered out by filter.
+    /// 2. Mark pack_res[i] as NotNeedToRead if all rows in the i-th pack are filtered out by filter.
 
     const auto & pack_stats = dmfile->getPackStats();
     auto & pack_res = pack_filter.getPackRes();
@@ -187,18 +187,18 @@ Block DMFileReader::readWithFilter(const IColumn::Filter & filter)
         for (size_t i = start_pack_id; i < last_pack_id; ++i)
         {
             if (countBytesInFilter(filter, offset, pack_stats[i].rows) == 0)
-                pack_res[i] = RSResultConst::None;
+                pack_res[i].setNotNeedToRead();
             offset += pack_stats[i].rows;
         }
     }
 
-    /// 3. Mark the pack_res[last_pack_id] as None temporarily to avoid reading it and its following packs in this round
+    /// 3. Mark the pack_res[last_pack_id] as NotNeedToRead temporarily to avoid reading it and its following packs in this round
 
     auto next_pack_id_pack_res_cp = RSResultConst::None;
     if (last_pack_id < pack_res.size())
     {
         next_pack_id_pack_res_cp = pack_res[last_pack_id];
-        pack_res[last_pack_id] = RSResultConst::None;
+        pack_res[last_pack_id].setNotNeedToRead();
     }
 
     /// 4. Read and filter packs
