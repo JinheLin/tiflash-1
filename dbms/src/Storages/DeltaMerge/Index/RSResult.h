@@ -18,6 +18,7 @@
 
 namespace DB::DM
 {
+
 struct Attr
 {
     String col_name;
@@ -26,111 +27,115 @@ struct Attr
 };
 using Attrs = std::vector<Attr>;
 
-enum class RSResult : UInt8
+class RSResult
 {
-    Unknown = 0, // Not checked yet
-    Some = 1, // Some values meet requirements and NOT has null, need to read and perform filtering
-    None = 2, // No value meets requirements and NOT has null, no need to read
-    All = 3, // All values meet requirements NOT has null, need to read and no need perform filtering
-    SomeNull = 4, // Some values meet requirements and has null, need to read and perform filtering
-    NoneNull = 5, // No value meets requirements and has null, no need to read
-    AllNull = 6, // All values meet requirements and has null, need to read and perform filtering
+public:
+    enum class HitState : UInt8
+    {
+        Unknown = 0,
+        None = 1,
+        Some = 2,
+        All = 3,
+    };
+
+    bool has_null;
+
+    HitState hit_state;
+
+    RSResult()
+        : has_null(false)
+        , hit_state(HitState::Unknown)
+
+    {}
+
+    RSResult(HitState hit_state_, bool has_null_)
+        : has_null(has_null_)
+        , hit_state(hit_state_)
+    {}
+
+    RSResult operator||(const RSResult & other) const
+    {
+        if (unlikely(hit_state == HitState::Unknown || other.hit_state == HitState::Unknown))
+            throw Exception("Unexpected Unknown");
+
+        if (hit_state == HitState::All || other.hit_state == HitState::All)
+            return RSResult(HitState::All, has_null || other.has_null);
+
+        if (hit_state == HitState::Some || other.hit_state == HitState::Some)
+            return RSResult(HitState::Some, has_null || other.has_null);
+
+        return RSResult(HitState::None, has_null || other.has_null);
+    }
+
+    RSResult operator&&(const RSResult & other) const
+    {
+        if (unlikely(hit_state == HitState::Unknown || other.hit_state == HitState::Unknown))
+            throw Exception("Unexpected Unknown");
+
+        if (hit_state == HitState::None || other.hit_state == HitState::None)
+            return RSResult(HitState::None, has_null || other.has_null);
+
+        if (hit_state == HitState::All && other.hit_state == HitState::All)
+            return RSResult(HitState::All, has_null || other.has_null);
+
+        return RSResult(HitState::Some, has_null || other.has_null);
+    }
+
+    RSResult operator!() const
+    {
+        switch (hit_state)
+        {
+        case HitState::Some:
+            return RSResult(HitState::Some, has_null);
+        case HitState::None:
+            return RSResult(HitState::All, has_null);
+        case HitState::All:
+            return RSResult(HitState::None, has_null);
+        default:
+            throw Exception("Unexpected Unknown");
+        }
+    }
+
+    String toString() const
+    {
+        switch (hit_state)
+        {
+        case HitState::None:
+            return has_null ? "NoneNull" : "None";
+        case HitState::Some:
+            return has_null ? "SomeNull" : "Some";
+        case HitState::All:
+            return has_null ? "AllNull" : "All";
+        default:
+            return "Unknown";
+        }
+    }
+
+    bool operator==(const RSResult & other) const { return hit_state == other.hit_state && has_null == other.has_null; }
+
+    bool needToRead() const { return hit_state != HitState::None; }
+
+    bool needToFilter() const { return hit_state == HitState::All && !has_null; }
 };
+
+namespace RSResultConst
+{
+
+// All values meet requirements NOT has null, need to read and no need perform filtering
+static const RSResult All = RSResult(RSResult::HitState::All, false);
+// Some values meet requirements and NOT has null, need to read and perform filtering
+static const RSResult Some = RSResult(RSResult::HitState::Some, false);
+// No value meets requirements and NOT has null, no need to read
+static const RSResult None = RSResult(RSResult::HitState::None, false);
+// All values meet requirements and has null, need to read and perform filtering
+static const RSResult AllNull = RSResult(RSResult::HitState::All, true);
+// Some values meet requirements and has null, need to read and perform filtering
+static const RSResult SomeNull = RSResult(RSResult::HitState::Some, true);
+// No value meets requirements and has null, no need to read
+static const RSResult NoneNull = RSResult(RSResult::HitState::None, true);
+
+} // namespace RSResultConst
+
 using RSResults = std::vector<RSResult>;
 
-ALWAYS_INLINE inline std::pair<RSResult, bool> removeNull(RSResult v) noexcept
-{
-    switch (v)
-    {
-    case RSResult::SomeNull:
-        return {RSResult::Some, true};
-    case RSResult::NoneNull:
-        return {RSResult::None, true};
-    case RSResult::AllNull:
-        return {RSResult::All, true};
-    default:
-        return {v, false};
-    }
-}
-
-ALWAYS_INLINE inline RSResult addNull(RSResult v) noexcept
-{
-    switch (v)
-    {
-    case RSResult::Some:
-        return RSResult::SomeNull;
-    case RSResult::None:
-        return RSResult::NoneNull;
-    case RSResult::All:
-        return RSResult::AllNull;
-    default:
-        return v;
-    }
-}
-
-ALWAYS_INLINE inline RSResult operator!(RSResult v)
-{
-    switch (v)
-    {
-    case RSResult::Some:
-        return RSResult::Some;
-    case RSResult::None:
-        return RSResult::All;
-    case RSResult::All:
-        return RSResult::None;
-    case RSResult::SomeNull:
-        return RSResult::SomeNull;
-    case RSResult::NoneNull:
-        return RSResult::AllNull;
-    case RSResult::AllNull:
-        return RSResult::NoneNull;
-    default:
-        throw Exception("Unknow RSResult: {}", static_cast<UInt8>(v));
-    }
-}
-
-ALWAYS_INLINE inline RSResult operator||(RSResult v0, RSResult v1)
-{
-    RUNTIME_CHECK(v0 != RSResult::Unknown && v1 != RSResult::Unknown);
-
-    // According to https://dev.mysql.com/doc/refman/8.4/en/logical-operators.html#operator_or,
-    // the result of `1 || 0/1/NULL` is 1.
-    if (v0 == RSResult::All || v1 == RSResult::All)
-        return RSResult::All;
-
-    auto [t0, has_null0] = removeNull(v0);
-    auto [t1, has_null1] = removeNull(v1);
-    auto result = RSResult::None;
-    if (t0 == RSResult::All || t1 == RSResult::All)
-        result = RSResult::All;
-    else if (t0 == RSResult::Some || t1 == RSResult::Some)
-        result = RSResult::Some;
-
-    return (has_null0 || has_null1) ? addNull(result) : result;
-}
-
-ALWAYS_INLINE inline RSResult operator&&(RSResult v0, RSResult v1)
-{
-    RUNTIME_CHECK(v0 != RSResult::Unknown && v1 != RSResult::Unknown);
-
-    // According to https://dev.mysql.com/doc/refman/8.4/en/logical-operators.html#operator_and,
-    // the result of `0 && NULL` is NULL. So the following logic is invalid:
-    // if (v0 == RSResult::None || v1 == RSResult::None)
-    //     return RSResult::None;
-
-    auto [t0, has_null0] = removeNull(v0);
-    auto [t1, has_null1] = removeNull(v1);
-    auto result = RSResult::Some;
-    if (t0 == RSResult::None || t1 == RSResult::None)
-        result = RSResult::None;
-    if (t0 == RSResult::All && t1 == RSResult::All)
-        result = RSResult::All;
-
-    return (has_null0 || has_null1) ? addNull(result) : result;
-}
-
-ALWAYS_INLINE inline bool isUse(RSResult res) noexcept
-{
-    return res != RSResult::None && res != RSResult::NoneNull;
-}
 } // namespace DB::DM

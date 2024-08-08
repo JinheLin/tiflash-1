@@ -29,6 +29,7 @@
 #include <Storages/DeltaMerge/Index/MinMaxIndex.h>
 #include <Storages/DeltaMerge/Index/RoughCheck.h>
 
+
 namespace DB::DM
 {
 
@@ -236,7 +237,7 @@ RSResults MinMaxIndex::checkNullableInImpl(
     const std::vector<Field> & values,
     const DataTypePtr & type)
 {
-    RSResults results(pack_count, RSResult::SomeNull);
+    RSResults results(pack_count, RSResultConst::SomeNull);
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
@@ -245,7 +246,7 @@ RSResults MinMaxIndex::checkNullableInImpl(
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
         auto value_result = RoughCheck::CheckIn::check<T>(values, type, min, max);
-        results[i - start_pack] = addNullIfHasNull(value_result, i);
+        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -259,7 +260,7 @@ RSResults MinMaxIndex::checkNullableIn(
     const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
     const auto & null_map = column_nullable.getNullMapColumn();
 
-    RSResults results(pack_count, RSResult::SomeNull);
+    RSResults results(pack_count, RSResultConst::SomeNull);
     const auto * raw_type = type.get();
 
 #define DISPATCH(TYPE)                                 \
@@ -296,7 +297,7 @@ RSResults MinMaxIndex::checkNullableIn(
             prev_offset = offsets[pos - 1];
             auto max = String(chars[prev_offset], offsets[pos] - prev_offset - 1);
             auto value_result = RoughCheck::CheckIn::check<String>(values, type, min, max);
-            results[i - start_pack] = addNullIfHasNull(value_result, i);
+            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
         }
         return results;
     }
@@ -331,7 +332,7 @@ RSResults MinMaxIndex::checkInImpl(
     const std::vector<Field> & values,
     const DataTypePtr & type)
 {
-    RSResults results(pack_count, RSResult::None);
+    RSResults results(pack_count, RSResultConst::None);
     const auto & minmaxes_data = toColumnVectorData<T>(minmaxes);
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
@@ -340,7 +341,7 @@ RSResults MinMaxIndex::checkInImpl(
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
         auto value_result = RoughCheck::CheckIn::check<T>(values, type, min, max);
-        results[i - start_pack] = addNullIfHasNull(value_result, i);
+        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -351,7 +352,7 @@ RSResults MinMaxIndex::checkIn(
     const std::vector<Field> & values,
     const DataTypePtr & type)
 {
-    RSResults results(pack_count, RSResult::None);
+    RSResults results(pack_count, RSResultConst::None);
 
     const auto * raw_type = type.get();
     if (typeid_cast<const DataTypeNullable *>(raw_type))
@@ -389,7 +390,7 @@ RSResults MinMaxIndex::checkIn(
             prev_offset = offsets[pos - 1];
             auto max = String(reinterpret_cast<const char *>(&chars[prev_offset]), offsets[pos] - prev_offset - 1);
             auto value_result = RoughCheck::CheckIn::check<String>(values, type, min, max);
-            results[i - start_pack] = addNullIfHasNull(value_result, i);
+            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
         }
         return results;
     }
@@ -398,13 +399,13 @@ RSResults MinMaxIndex::checkIn(
         return checkInImpl<DataTypeDate::FieldType>(start_pack, pack_count, values, type);
     if (typeid_cast<const DataTypeDateTime *>(raw_type))
         return checkInImpl<DataTypeDateTime::FieldType>(start_pack, pack_count, values, type);
-    return RSResults(pack_count, RSResult::Some);
+    return RSResults(pack_count, RSResultConst::Some);
 }
 
 template <typename Op, typename T>
 RSResults MinMaxIndex::checkCmpImpl(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type)
 {
-    RSResults results(pack_count, RSResult::None);
+    RSResults results(pack_count, RSResultConst::None);
     const auto & minmaxes_data = toColumnVectorData<T>(minmaxes);
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
@@ -413,7 +414,7 @@ RSResults MinMaxIndex::checkCmpImpl(size_t start_pack, size_t pack_count, const 
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
         auto value_result = Op::template check<T>(value, type, min, max);
-        results[i - start_pack] = addNullIfHasNull(value_result, i);
+        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -421,7 +422,7 @@ RSResults MinMaxIndex::checkCmpImpl(size_t start_pack, size_t pack_count, const 
 template <typename Op>
 RSResults MinMaxIndex::checkCmp(size_t start_pack, size_t pack_count, const Field & value, const DataTypePtr & type)
 {
-    RSResults results(pack_count, RSResult::None);
+    RSResults results(pack_count, RSResultConst::None);
     if (value.isNull())
         return results;
 
@@ -460,7 +461,7 @@ RSResults MinMaxIndex::checkCmp(size_t start_pack, size_t pack_count, const Fiel
             prev_offset = offsets[pos - 1];
             auto max = String(reinterpret_cast<const char *>(&chars[prev_offset]), offsets[pos] - prev_offset - 1);
             auto value_result = Op::template check<String>(value, type, min, max);
-            results[i - start_pack] = addNullIfHasNull(value_result, i);
+            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
         }
         return results;
     }
@@ -469,7 +470,7 @@ RSResults MinMaxIndex::checkCmp(size_t start_pack, size_t pack_count, const Fiel
         return checkCmpImpl<Op, DataTypeDate::FieldType>(start_pack, pack_count, value, type);
     if (typeid_cast<const DataTypeDateTime *>(raw_type))
         return checkCmpImpl<Op, DataTypeDateTime::FieldType>(start_pack, pack_count, value, type);
-    return RSResults(pack_count, RSResult::Some);
+    return RSResults(pack_count, RSResultConst::Some);
 }
 
 template RSResults MinMaxIndex::checkCmp<RoughCheck::CheckEqual>(
@@ -497,7 +498,7 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
     const Field & value,
     const DataTypePtr & type)
 {
-    RSResults results(pack_count, RSResult::SomeNull);
+    RSResults results(pack_count, RSResultConst::SomeNull);
     const auto & minmaxes_data = toColumnVectorData<T>(column_nullable.getNestedColumnPtr());
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
@@ -506,7 +507,7 @@ RSResults MinMaxIndex::checkNullableCmpImpl(
         auto min = minmaxes_data[i * 2];
         auto max = minmaxes_data[i * 2 + 1];
         auto value_result = Op::template check<T>(value, type, min, max);
-        results[i - start_pack] = addNullIfHasNull(value_result, i);
+        results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
     }
     return results;
 }
@@ -521,7 +522,7 @@ RSResults MinMaxIndex::checkNullableCmp(
     const auto & column_nullable = static_cast<const ColumnNullable &>(*minmaxes);
     const auto & null_map = column_nullable.getNullMapColumn();
 
-    RSResults results(pack_count, RSResult::SomeNull);
+    RSResults results(pack_count, RSResultConst::SomeNull);
     const auto * raw_type = type.get();
 
 #define DISPATCH(TYPE)                                 \
@@ -558,7 +559,7 @@ RSResults MinMaxIndex::checkNullableCmp(
             prev_offset = offsets[pos - 1];
             auto max = String(chars[prev_offset], offsets[pos] - prev_offset - 1);
             auto value_result = Op::template check<String>(value, type, min, max);
-            results[i - start_pack] = addNullIfHasNull(value_result, i);
+            results[i - start_pack] = RSResult(value_result.hit_state, has_null_marks[i]);
         }
         return results;
     }
@@ -586,23 +587,19 @@ RSResults MinMaxIndex::checkNullableCmp(
     return results;
 }
 
-// If a pack only contains null marks and delete marks, checkIsNull will return RSResult::All.
+// If a pack only contains null marks and delete marks, checkIsNull will return RSResultConst::All.
 // This is safe because MVCC will read the tag column and the deleted rows will be filtered out.
 RSResults MinMaxIndex::checkIsNull(size_t start_pack, size_t pack_count)
 {
-    RSResults results(pack_count, RSResult::None);
+    RSResults results(pack_count, RSResultConst::None);
     for (size_t i = start_pack; i < start_pack + pack_count; ++i)
     {
         if (has_null_marks[i])
         {
-            results[i - start_pack] = has_value_marks[i] ? RSResult::Some : RSResult::All;
+            results[i - start_pack] = has_value_marks[i] ? RSResultConst::Some : RSResultConst::All;
         }
     }
     return results;
 }
 
-RSResult MinMaxIndex::addNullIfHasNull(RSResult value_result, size_t i) const
-{
-    return has_null_marks[i] ? addNull(value_result) : value_result;
-}
 } // namespace DB::DM

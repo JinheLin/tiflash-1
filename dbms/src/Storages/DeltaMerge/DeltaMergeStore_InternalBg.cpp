@@ -593,8 +593,8 @@ bool shouldCompactStableWithTooMuchDataOutOfSegmentRange(
     }
 
     auto at_least_result = snap->stable->getAtLeastRowsAndBytes(context, seg->getRowKeyRange());
-    if (at_least_result.first_pack_intersection == RSResult::All //
-        && at_least_result.last_pack_intersection == RSResult::All)
+    if (at_least_result.first_pack_intersection == RSResultConst::All //
+        && at_least_result.last_pack_intersection == RSResultConst::All)
     {
         LOG_TRACE(
             log,
@@ -611,7 +611,7 @@ bool shouldCompactStableWithTooMuchDataOutOfSegmentRange(
     // Only try to compact the segment when there is data out of this segment range and is also not shared by neighbor segments.
     bool contains_invalid_data = false;
     const auto & dt_files = snap->stable->getDMFiles();
-    if (at_least_result.first_pack_intersection != RSResult::All)
+    if (at_least_result.first_pack_intersection != RSResultConst::All)
     {
         auto first_file_id = dt_files.front()->fileId();
         if (prev_seg != nullptr && prev_segment_file_ids.count(first_file_id) == 0)
@@ -619,7 +619,7 @@ bool shouldCompactStableWithTooMuchDataOutOfSegmentRange(
             contains_invalid_data = true;
         }
     }
-    if (at_least_result.last_pack_intersection != RSResult::All)
+    if (at_least_result.last_pack_intersection != RSResultConst::All)
     {
         auto last_file_id = dt_files.back()->fileId();
         if (next_seg != nullptr && next_segment_file_ids.count(last_file_id) == 0)
@@ -634,8 +634,8 @@ bool shouldCompactStableWithTooMuchDataOutOfSegmentRange(
             "GC - shouldCompactStableWithTooMuchDataOutOfSegmentRange checked false "
             "because segment DTFile is shared with a neighbor segment, "
             "first_pack_inc={} last_pack_inc={} prev_seg_files=[{}] next_seg_files=[{}] my_files=[{}] segment={}",
-            magic_enum::enum_name(at_least_result.first_pack_intersection),
-            magic_enum::enum_name(at_least_result.last_pack_intersection),
+            at_least_result.first_pack_intersection.toString(),
+            at_least_result.last_pack_intersection.toString(),
             fmt::join(prev_segment_file_ids, ","),
             fmt::join(next_segment_file_ids, ","),
             [&] {
@@ -687,8 +687,8 @@ bool shouldCompactStableWithTooMuchDataOutOfSegmentRange(
         "check_result={} first_pack_inc={} last_pack_inc={} rows_at_least={} bytes_at_least={} file_rows={} "
         "file_bytes={} segment={} ",
         check_result,
-        magic_enum::enum_name(at_least_result.first_pack_intersection),
-        magic_enum::enum_name(at_least_result.last_pack_intersection),
+        at_least_result.first_pack_intersection.toString(),
+        at_least_result.last_pack_intersection.toString(),
         at_least_result.rows,
         at_least_result.bytes,
         file_rows,

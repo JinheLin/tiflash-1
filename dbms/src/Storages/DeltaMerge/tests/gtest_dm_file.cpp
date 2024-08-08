@@ -906,9 +906,9 @@ try
             = builder.setColumnCache(column_cache)
                   .build(dm_file, *cols, RowKeyRanges{RowKeyRange::newAll(false, 1)}, std::make_shared<ScanContext>());
         auto & pack_res = getReaderPackRes(stream);
-        pack_res[1] = RSResult::None;
+        pack_res[1] = RSResultConst::None;
         stream->skipNextBlock();
-        pack_res[1] = RSResult::Some;
+        pack_res[1] = RSResultConst::Some;
         std::vector<Array> partial_expect_arr_values;
         partial_expect_arr_values.insert(
             partial_expect_arr_values.cend(),
@@ -1118,9 +1118,9 @@ try
             = builder.setColumnCache(column_cache)
                   .build(dm_file, *cols, RowKeyRanges{RowKeyRange::newAll(false, 1)}, std::make_shared<ScanContext>());
         auto & pack_res = getReaderPackRes(stream);
-        pack_res[1] = RSResult::None;
+        pack_res[1] = RSResultConst::None;
         ASSERT_EQ(stream->skipNextBlock(), num_rows_write / 3);
-        pack_res[1] = RSResult::Some;
+        pack_res[1] = RSResultConst::Some;
         ASSERT_INPUTSTREAM_COLS_UR(
             stream,
             Strings({DMTestEnv::pk_name}),

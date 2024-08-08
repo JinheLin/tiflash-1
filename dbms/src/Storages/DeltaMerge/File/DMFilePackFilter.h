@@ -27,6 +27,7 @@
 #include <Storages/DeltaMerge/ScanContext_fwd.h>
 #include <Storages/S3/S3Common.h>
 
+
 namespace ProfileEvents
 {
 extern const Event DMFileFilterNoFilter;
@@ -106,7 +107,7 @@ public:
         const auto & pack_stats = dmfile->getPackStats();
         for (size_t i = 0; i < pack_stats.size(); ++i)
         {
-            if (isUse(pack_res[i]))
+            if (pack_res[i].needToRead())
             {
                 rows += pack_stats[i].rows;
                 bytes += pack_stats[i].bytes;
@@ -135,7 +136,7 @@ private:
         , filter(filter_)
         , read_packs(read_packs_)
         , file_provider(file_provider_)
-        , handle_res(dmfile->getPacks(), RSResult::All)
+        , handle_res(dmfile->getPacks(), RSResultConst::All)
         , scan_context(scan_context_)
         , log(Logger::get(tracing_id))
         , read_limiter(read_limiter_)
@@ -157,8 +158,8 @@ private:
 
     void tryLoadIndex(ColId col_id);
 
-    // None+NoneNull, Some+SomeNull, All, AllNull
-    std::tuple<UInt64, UInt64, UInt64, UInt64> countPackRes() const;
+    // <need to read, need to filter>
+    std::tuple<UInt64, UInt64> countPackRes() const;
 
 private:
     DMFilePtr dmfile;

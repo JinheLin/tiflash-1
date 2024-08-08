@@ -107,10 +107,9 @@ String ScanContext::toJson() const
     json->set(
         "rs_pack_filter_check_time",
         fmt::format("{:.3f}ms", total_rs_pack_filter_check_time_ns.load() / NS_TO_MS_SCALE));
-    json->set("rs_pack_filter_none", rs_pack_filter_none.load());
-    json->set("rs_pack_filter_some", rs_pack_filter_some.load());
-    json->set("rs_pack_filter_all", rs_pack_filter_all.load());
-    json->set("rs_pack_filter_all_null", rs_pack_filter_all_null.load());
+    json->set("rs_pack_filter_total", rs_pack_filter_total.load());
+    json->set("rs_pack_filter_need_to_read", rs_pack_filter_need_to_read.load());
+    json->set("rs_pack_filter_need_to_filter", rs_pack_filter_need_to_filter.load());
 
     json->set("num_remote_region", total_remote_region_num.load());
     json->set("num_local_region", total_local_region_num.load());

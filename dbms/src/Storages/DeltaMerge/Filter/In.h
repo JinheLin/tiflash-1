@@ -47,17 +47,17 @@ public:
             ",");
         buf.append("]}");
         return buf.toString();
-    };
+    }
 
     RSResults roughCheck(size_t start_pack, size_t pack_count, const RSCheckParam & param) override
     {
         // If values is empty (for example where a in ()), all packs will not match.
         // So return none directly.
         if (values.empty())
-            return RSResults(pack_count, RSResult::None);
+            return RSResults(pack_count, RSResultConst::None);
         auto rs_index = getRSIndex(param, attr);
         return rs_index ? rs_index->minmax->checkIn(start_pack, pack_count, values, rs_index->type)
-                        : RSResults(pack_count, RSResult::Some);
+                        : RSResults(pack_count, RSResultConst::Some);
     }
 };
 

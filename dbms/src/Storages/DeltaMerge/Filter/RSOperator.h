@@ -142,7 +142,7 @@ RSResults minMaxCheckCmp(
 {
     auto rs_index = getRSIndex(param, attr);
     return rs_index ? rs_index->minmax->checkCmp<Op>(start_pack, pack_count, value, rs_index->type)
-                    : RSResults(pack_count, RSResult::Some);
+                    : RSResults(pack_count, RSResultConst::Some);
 }
 
 // logical

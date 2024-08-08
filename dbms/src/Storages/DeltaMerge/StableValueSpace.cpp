@@ -457,7 +457,7 @@ void StableValueSpace::calculateStableProperty(
         }
         for (size_t pack_id = 0; pack_id < pack_res.size(); ++pack_id)
         {
-            if (!isUse(pack_res[pack_id]))
+            if (!pack_res[pack_id].needToRead())
                 continue;
             property.num_versions += pack_stats[pack_id].rows;
             property.num_puts += pack_stats[pack_id].rows - pack_stats[pack_id].not_clean;
@@ -596,7 +596,7 @@ RowsAndBytes StableValueSpace::Snapshot::getApproxRowsAndBytes(const DMContext &
         const auto & pack_res = filter.getPackResConst();
         for (size_t i = 0; i < pack_stats.size(); ++i)
         {
-            if (isUse(pack_res[i]))
+            if (pack_res[i].needToRead())
             {
                 ++match_packs;
                 total_match_rows += pack_stats[i].rows;
@@ -643,7 +643,7 @@ StableValueSpace::Snapshot::getAtLeastRowsAndBytes(const DMContext & context, co
         {
             // TODO: this check may not be correct when support multiple files in a stable, let's just keep it now for simplicity
             if (handle_filter_result.empty())
-                ret.first_pack_intersection = RSResult::None;
+                ret.first_pack_intersection = RSResultConst::None;
             else
                 ret.first_pack_intersection = handle_filter_result.front();
         }
@@ -651,7 +651,7 @@ StableValueSpace::Snapshot::getAtLeastRowsAndBytes(const DMContext & context, co
         {
             // TODO: this check may not be correct when support multiple files in a stable, let's just keep it now for simplicity
             if (handle_filter_result.empty())
-                ret.last_pack_intersection = RSResult::None;
+                ret.last_pack_intersection = RSResultConst::None;
             else
                 ret.last_pack_intersection = handle_filter_result.back();
         }
@@ -660,7 +660,7 @@ StableValueSpace::Snapshot::getAtLeastRowsAndBytes(const DMContext & context, co
         for (size_t pack_idx = 0; pack_idx < pack_stats.size(); ++pack_idx)
         {
             // Only count packs that are fully contained by the range.
-            if (handle_filter_result[pack_idx] == RSResult::All)
+            if (handle_filter_result[pack_idx] == RSResultConst::All)
             {
                 ret.rows += pack_stats[pack_idx].rows;
                 ret.bytes += pack_stats[pack_idx].bytes;

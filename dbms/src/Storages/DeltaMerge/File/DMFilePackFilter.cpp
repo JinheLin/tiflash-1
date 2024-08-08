@@ -33,7 +33,7 @@ void DMFilePackFilter::init(ReadTag read_tag)
             handle_filters.emplace_back(toFilter(rowkey_range));
         for (size_t i = 0; i < pack_count; ++i)
         {
-            handle_res[i] = RSResult::None;
+            handle_res[i] = RSResultConst::None;
         }
         for (auto & handle_filter : handle_filters)
         {
@@ -58,7 +58,7 @@ void DMFilePackFilter::init(ReadTag read_tag)
     {
         for (size_t i = 0; i < pack_count; ++i)
         {
-            pack_res[i] = read_packs->contains(i) ? pack_res[i] : RSResult::None;
+            pack_res[i] = read_packs->contains(i) ? pack_res[i] : RSResultConst::None;
         }
     }
     auto after_read_packs = countUsePack();
@@ -82,9 +82,8 @@ void DMFilePackFilter::init(ReadTag read_tag)
             pack_res.begin(),
             [](RSResult a, RSResult b) { return a && b; });
     }
-    auto [none_count, some_count, all_count, all_null_count] = countPackRes();
-    auto after_filter = some_count + all_count + all_null_count;
-    ProfileEvents::increment(ProfileEvents::DMFileFilterAftRoughSet, after_filter);
+    auto [need_to_read, need_to_filter] = countPackRes();
+    ProfileEvents::increment(ProfileEvents::DMFileFilterAftRoughSet, need_to_read);
     // In table scanning, DMFilePackFilter of a DMFile may be created several times:
     // 1. When building MVCC bitmap (ReadTag::MVCC).
     // 2. When building LM filter stream (ReadTag::LM).
@@ -93,71 +92,50 @@ void DMFilePackFilter::init(ReadTag read_tag)
     // TODO: We can create DMFilePackFilter at the beginning and pass it to the stages described above.
     if (read_tag == ReadTag::Query)
     {
-        scan_context->rs_pack_filter_none += none_count;
-        scan_context->rs_pack_filter_some += some_count;
-        scan_context->rs_pack_filter_all += all_count;
-        scan_context->rs_pack_filter_all_null += all_null_count;
+        scan_context->rs_pack_filter_total += pack_count;
+        scan_context->rs_pack_filter_need_to_read += need_to_read;
+        scan_context->rs_pack_filter_need_to_filter += need_to_filter;
     }
 
     Float64 filter_rate = 0.0;
     if (after_read_packs != 0)
     {
-        filter_rate = (after_read_packs - after_filter) * 100.0 / after_read_packs;
+        filter_rate = (after_read_packs - need_to_read) * 100.0 / after_read_packs;
         GET_METRIC(tiflash_storage_rough_set_filter_rate, type_dtfile_pack).Observe(filter_rate);
     }
     LOG_DEBUG(
         log,
         "RSFilter exclude rate: {:.2f}, after_pk: {}, after_read_packs: {}, after_filter: {}, handle_ranges: {}"
-        ", read_packs: {}, pack_count: {}, none_count: {}, some_count: {}, all_count: {}, all_null_count: {}, "
-        "read_tag: {}",
+        ", read_packs: {}, pack_count: {}, need_to_read: {}, need_to_filter: {}, read_tag: {}",
         ((after_read_packs == 0) ? std::numeric_limits<double>::quiet_NaN() : filter_rate),
         after_pk,
         after_read_packs,
-        after_filter,
+        need_to_read,
         toDebugString(rowkey_ranges),
         ((read_packs == nullptr) ? 0 : read_packs->size()),
         pack_count,
-        none_count,
-        some_count,
-        all_count,
-        all_null_count,
+        need_to_read,
+        need_to_filter,
         magic_enum::enum_name(read_tag));
 }
 
-std::tuple<UInt64, UInt64, UInt64, UInt64> DMFilePackFilter::countPackRes() const
+std::tuple<UInt64, UInt64> DMFilePackFilter::countPackRes() const
 {
-    UInt64 none_count = 0;
-    UInt64 some_count = 0;
-    UInt64 all_count = 0;
-    UInt64 all_null_count = 0;
+    UInt64 need_to_read = 0;
+    UInt64 need_to_filter = 0;
     for (auto res : pack_res)
     {
-        switch (res)
-        {
-        case RSResult::None:
-        case RSResult::NoneNull:
-            ++none_count;
-            break;
-        case RSResult::Some:
-        case RSResult::SomeNull:
-            ++some_count;
-            break;
-        case RSResult::All:
-            ++all_count;
-            break;
-        case RSResult::AllNull:
-            ++all_null_count;
-            break;
-        default:
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "{} is invalid", static_cast<Int32>(res));
-        }
+        if (res.needToRead())
+            ++need_to_read;
+        if (res.needToFilter())
+            ++need_to_filter;
     }
-    return {none_count, some_count, all_count, all_null_count};
+    return {need_to_read, need_to_filter};
 }
 
 UInt64 DMFilePackFilter::countUsePack() const
 {
-    return std::count_if(pack_res.cbegin(), pack_res.cend(), [](RSResult res) { return isUse(res); });
+    return std::count_if(pack_res.cbegin(), pack_res.cend(), [](RSResult res) { return res.needToRead(); });
 }
 
 void DMFilePackFilter::loadIndex(

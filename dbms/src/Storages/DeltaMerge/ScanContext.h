@@ -43,10 +43,9 @@ public:
     std::atomic<uint64_t> total_dmfile_read_time_ns{0};
 
     std::atomic<uint64_t> total_rs_pack_filter_check_time_ns{0};
-    std::atomic<uint64_t> rs_pack_filter_none{0};
-    std::atomic<uint64_t> rs_pack_filter_some{0};
-    std::atomic<uint64_t> rs_pack_filter_all{0};
-    std::atomic<uint64_t> rs_pack_filter_all_null{0};
+    std::atomic<uint64_t> rs_pack_filter_total{0};
+    std::atomic<uint64_t> rs_pack_filter_need_to_read{0};
+    std::atomic<uint64_t> rs_pack_filter_need_to_filter{0};
 
     std::atomic<uint64_t> total_remote_region_num{0};
     std::atomic<uint64_t> total_local_region_num{0};
@@ -102,7 +101,7 @@ public:
         dmfile_lm_filter_scanned_rows = tiflash_scan_context_pb.dmfile_lm_filter_scanned_rows();
         dmfile_lm_filter_skipped_rows = tiflash_scan_context_pb.dmfile_lm_filter_skipped_rows();
         total_rs_pack_filter_check_time_ns = tiflash_scan_context_pb.total_dmfile_rs_check_ms() * 1000000;
-        // TODO: rs_pack_filter_none, rs_pack_filter_some, rs_pack_filter_all,rs_pack_filter_all_null
+        // TODO: rs_pack_filter_total, rs_pack_filter_need_to_read, rs_pack_filter_need_to_filter
         total_dmfile_read_time_ns = tiflash_scan_context_pb.total_dmfile_read_ms() * 1000000;
         create_snapshot_time_ns = tiflash_scan_context_pb.total_build_snapshot_ms() * 1000000;
         total_remote_region_num = tiflash_scan_context_pb.remote_regions();
@@ -145,7 +144,7 @@ public:
         tiflash_scan_context_pb.set_dmfile_lm_filter_scanned_rows(dmfile_lm_filter_scanned_rows);
         tiflash_scan_context_pb.set_dmfile_lm_filter_skipped_rows(dmfile_lm_filter_skipped_rows);
         tiflash_scan_context_pb.set_total_dmfile_rs_check_ms(total_rs_pack_filter_check_time_ns / 1000000);
-        // TODO: pack_filter_none, pack_filter_some, pack_filter_all
+        // TODO: rs_pack_filter_total, rs_pack_filter_need_to_read, rs_pack_filter_need_to_filter
         tiflash_scan_context_pb.set_total_dmfile_read_ms(total_dmfile_read_time_ns / 1000000);
         tiflash_scan_context_pb.set_total_build_snapshot_ms(create_snapshot_time_ns / 1000000);
         tiflash_scan_context_pb.set_remote_regions(total_remote_region_num);
@@ -188,10 +187,9 @@ public:
         dmfile_lm_filter_scanned_rows += other.dmfile_lm_filter_scanned_rows;
         dmfile_lm_filter_skipped_rows += other.dmfile_lm_filter_skipped_rows;
         total_rs_pack_filter_check_time_ns += other.total_rs_pack_filter_check_time_ns;
-        rs_pack_filter_none += other.rs_pack_filter_none;
-        rs_pack_filter_some += other.rs_pack_filter_some;
-        rs_pack_filter_all += other.rs_pack_filter_all;
-        rs_pack_filter_all_null += other.rs_pack_filter_all_null;
+        rs_pack_filter_total += other.rs_pack_filter_total;
+        rs_pack_filter_need_to_read += other.rs_pack_filter_need_to_read;
+        rs_pack_filter_need_to_filter += other.rs_pack_filter_need_to_filter;
         total_dmfile_read_time_ns += other.total_dmfile_read_time_ns;
 
         total_local_region_num += other.total_local_region_num;
@@ -237,7 +235,7 @@ public:
         dmfile_lm_filter_scanned_rows += other.dmfile_lm_filter_scanned_rows();
         dmfile_lm_filter_skipped_rows += other.dmfile_lm_filter_skipped_rows();
         total_rs_pack_filter_check_time_ns += other.total_dmfile_rs_check_ms() * 1000000;
-        // TODO: rs_pack_filter_none, rs_pack_filter_some, rs_pack_filter_all, rs_pack_filter_all_null
+        // TODO: rs_pack_filter_total, rs_pack_filter_need_to_read, rs_pack_filter_need_to_filter
         total_dmfile_read_time_ns += other.total_dmfile_read_ms() * 1000000;
         create_snapshot_time_ns += other.total_build_snapshot_ms() * 1000000;
         total_local_region_num += other.local_regions();

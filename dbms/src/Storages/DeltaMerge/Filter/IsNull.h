@@ -37,7 +37,8 @@ public:
     RSResults roughCheck(size_t start_pack, size_t pack_count, const RSCheckParam & param) override
     {
         auto rs_index = getRSIndex(param, attr);
-        return rs_index ? rs_index->minmax->checkIsNull(start_pack, pack_count) : RSResults(pack_count, RSResult::Some);
+        return rs_index ? rs_index->minmax->checkIsNull(start_pack, pack_count)
+                        : RSResults(pack_count, RSResultConst::Some);
     }
 };
 

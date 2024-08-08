@@ -60,8 +60,8 @@ protected:
 
 namespace
 {
-static constexpr ColId DEFAULT_COL_ID = 0;
-static const String DEFAULT_COL_NAME = "2020-09-26";
+constexpr ColId DEFAULT_COL_ID = 0;
+const String DEFAULT_COL_NAME = "2020-09-26";
 
 Attr attr(String type)
 {
@@ -225,24 +225,24 @@ Decimal64 getDecimal64(String s)
     return expected_default_value;
 }
 
-static constexpr Int64 Int64_Match_DATA = 100;
-static constexpr Int64 Int64_Greater_DATA = 10000;
-static constexpr Int64 Int64_Smaller_DATA = -1;
+constexpr Int64 Int64_Match_DATA = 100;
+constexpr Int64 Int64_Greater_DATA = 10000;
+constexpr Int64 Int64_Smaller_DATA = -1;
 
-static const String Date_Match_DATA = "2020-09-27";
-static const String Date_Greater_DATA = "2022-09-27";
-static const String Date_Smaller_DATA = "1997-09-27";
+const String Date_Match_DATA = "2020-09-27";
+const String Date_Greater_DATA = "2022-09-27";
+const String Date_Smaller_DATA = "1997-09-27";
 
-static const String DateTime_Match_DATA = "2020-01-01 05:00:01";
-static const String DateTime_Greater_DATA = "2022-01-01 05:00:01";
-static const String DateTime_Smaller_DATA = "1997-01-01 05:00:01";
+const String DateTime_Match_DATA = "2020-01-01 05:00:01";
+const String DateTime_Greater_DATA = "2022-01-01 05:00:01";
+const String DateTime_Smaller_DATA = "1997-01-01 05:00:01";
 
-static const String MyDateTime_Match_DATE = "2020-09-27";
-static const String MyDateTime_Greater_DATE = "2022-09-27";
-static const String MyDateTime_Smaller_DATE = "1997-09-27";
+const String MyDateTime_Match_DATE = "2020-09-27";
+const String MyDateTime_Greater_DATE = "2022-09-27";
+const String MyDateTime_Smaller_DATE = "1997-09-27";
 
-static const String Decimal_Match_DATA = "100.25566";
-static const String Decimal_UnMatch_DATA = "100.25500";
+const String Decimal_Match_DATA = "100.25566";
+const String Decimal_UnMatch_DATA = "100.25500";
 
 std::pair<String, CSVTuples> generateTypeValue(MinMaxTestDatatype data_type, bool has_null)
 {
@@ -2033,7 +2033,7 @@ try
     // make a euqal filter, check equal with 1
     auto filter = createEqual(attr("Nullable(Int64)"), Field(static_cast<Int64>(1)));
 
-    ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResult::SomeNull);
+    ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResultConst::SomeNull);
 }
 CATCH
 
@@ -2068,32 +2068,32 @@ try
     {
         // make a in filter, check in (NULL)
         auto filter = createIn(attr("Nullable(Int64)"), {Field()});
-        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResult::NoneNull);
+        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResultConst::NoneNull);
     }
     {
         // make a in filter, check in (NULL, 1)
         auto filter = createIn(attr("Nullable(Int64)"), {Field(), Field(static_cast<Int64>(1))});
-        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResult::SomeNull);
+        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResultConst::SomeNull);
     }
     {
         // make a in filter, check in (3)
         auto filter = createIn(attr("Nullable(Int64)"), {Field(static_cast<Int64>(3))});
-        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResult::NoneNull);
+        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResultConst::NoneNull);
     }
     {
         // make a not in filter, check not in (NULL)
         auto filter = createNot(createIn(attr("Nullable(Int64)"), {Field()}));
-        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResult::AllNull);
+        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResultConst::AllNull);
     }
     {
         // make a not in filter, check not in (NULL, 1)
         auto filter = createNot(createIn(attr("Nullable(Int64)"), {Field(), Field(static_cast<Int64>(1))}));
-        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResult::SomeNull);
+        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResultConst::SomeNull);
     }
     {
         // make a not in filter, check not in (3)
         auto filter = createNot(createIn(attr("Nullable(Int64)"), {Field(static_cast<Int64>(3))}));
-        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResult::AllNull);
+        ASSERT_EQ(filter->roughCheck(0, 1, param)[0], RSResultConst::AllNull);
     }
 }
 CATCH
@@ -2274,14 +2274,14 @@ try
     };
 
     std::vector<IsNullTestCase> cases = {
-        {{1, 2, 3, 4, std::nullopt}, {0, 0, 0, 0, 0}, RSResult::Some},
-        {{6, 7, 8, 9, 10}, {0, 0, 0, 0, 0}, RSResult::None},
-        {{std::nullopt, std::nullopt}, {0, 0}, RSResult::All},
-        {{1, 2, 3, 4, std::nullopt}, {0, 0, 0, 0, 1}, RSResult::None},
-        {{6, 7, 8, 9, 10}, {0, 0, 0, 1, 0}, RSResult::None},
-        {{std::nullopt, std::nullopt}, {1, 0}, RSResult::All},
-        {{std::nullopt, std::nullopt}, {1, 1}, RSResult::None},
-        {{1, 2, 3, 4}, {1, 1, 1, 1}, RSResult::None},
+        {{1, 2, 3, 4, std::nullopt}, {0, 0, 0, 0, 0}, RSResultConst::Some},
+        {{6, 7, 8, 9, 10}, {0, 0, 0, 0, 0}, RSResultConst::None},
+        {{std::nullopt, std::nullopt}, {0, 0}, RSResultConst::All},
+        {{1, 2, 3, 4, std::nullopt}, {0, 0, 0, 0, 1}, RSResultConst::None},
+        {{6, 7, 8, 9, 10}, {0, 0, 0, 1, 0}, RSResultConst::None},
+        {{std::nullopt, std::nullopt}, {1, 0}, RSResultConst::All},
+        {{std::nullopt, std::nullopt}, {1, 1}, RSResultConst::None},
+        {{1, 2, 3, 4}, {1, 1, 1, 1}, RSResultConst::None},
     };
 
     auto col_type = makeNullable(std::make_shared<DataTypeInt64>());
@@ -2291,11 +2291,8 @@ try
     for (size_t i = 0; i < cases.size(); ++i)
     {
         const auto & c = cases[i];
-        ASSERT_EQ(actual_results[i], c.result) << fmt::format(
-            "i={} actual={} expected={}",
-            i,
-            magic_enum::enum_name(actual_results[i]),
-            magic_enum::enum_name(c.result));
+        ASSERT_EQ(actual_results[i], c.result)
+            << fmt::format("i={} actual={} expected={}", i, actual_results[i].toString(), c.result.toString());
     }
 }
 CATCH
@@ -2365,46 +2362,46 @@ try
         {
             .values = {1, 2, 3, 4, 5, 6},
             .results = {
-                RSResult::SomeNull,  // checkIn can return All only when min value equals to max value
-                RSResult::Some,
-                RSResult::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::Some,  // checkIn can return All only when min value equals to max value
-                RSResult::Some,
-                RSResult::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::All,   // checkIn can return All only when min value equals to max value
-                RSResult::AllNull, // checkIn can return All only when min value equals to max value
+                RSResultConst::SomeNull,  // checkIn can return All only when min value equals to max value
+                RSResultConst::Some,
+                RSResultConst::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::Some,  // checkIn can return All only when min value equals to max value
+                RSResultConst::Some,
+                RSResultConst::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::All,   // checkIn can return All only when min value equals to max value
+                RSResultConst::AllNull, // checkIn can return All only when min value equals to max value
             },
         },
         {
             .values = {100},
             .results = {
-            RSResult::NoneNull,
-            RSResult::None,
-            RSResult::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
-            RSResult::None,
-            RSResult::None,
-            RSResult::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
-            RSResult::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
-            RSResult::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
-            RSResult::None,
-            RSResult::NoneNull,
+            RSResultConst::NoneNull,
+            RSResultConst::None,
+            RSResultConst::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
+            RSResultConst::None,
+            RSResultConst::None,
+            RSResultConst::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
+            RSResultConst::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
+            RSResultConst::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
+            RSResultConst::None,
+            RSResultConst::NoneNull,
             },
         },
         {
             .values = {0},
             .results = {
-            RSResult::NoneNull,
-            RSResult::None,
-            RSResult::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
-            RSResult::None,
-            RSResult::None,
-            RSResult::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
-            RSResult::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
-            RSResult::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
-            RSResult::None,
-            RSResult::NoneNull,
+            RSResultConst::NoneNull,
+            RSResultConst::None,
+            RSResultConst::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
+            RSResultConst::None,
+            RSResultConst::None,
+            RSResultConst::SomeNull,  // All the fields are null, the default value is null, meet the compatibility check
+            RSResultConst::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
+            RSResultConst::SomeNull,  // All the fields are deleted, the default value is null, meet the compatibility check
+            RSResultConst::None,
+            RSResultConst::NoneNull,
             },
         },
     };
@@ -2426,14 +2423,14 @@ try
                 min_max_check_test_data[j].column_data,
                 min_max_check_test_data[j].del_mark,
                 values,
-                magic_enum::enum_name(actual_results[j]),
-                magic_enum::enum_name(expected_results[j]));
+                actual_results[j].toString(),
+                expected_results[j].toString());
         }
     }
 }
 CATCH
 
-TEST_F(MinMaxIndexTest, CheckCmp_Equal)
+TEST_F(MinMaxIndexTest, CheckCmpEqual)
 try
 {
     struct ValuesAndResults
@@ -2446,31 +2443,31 @@ try
         {
             .value = 1,
             .results = {
-                RSResult::SomeNull,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::Some,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::All,
-                RSResult::AllNull,
+                RSResultConst::SomeNull,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::Some,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::All,
+                RSResultConst::AllNull,
             },
         },
         {
             .value = 5,
             .results = {
-                RSResult::NoneNull,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::NoneNull,
+                RSResultConst::NoneNull,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::NoneNull,
             },
         }
     };
@@ -2489,14 +2486,14 @@ try
                 min_max_check_test_data[j].column_data,
                 min_max_check_test_data[j].del_mark,
                 value,
-                magic_enum::enum_name(actual_results[j]),
-                magic_enum::enum_name(expected_results[j]));
+                actual_results[j].toString(),
+                expected_results[j].toString());
         }
     }
 }
 CATCH
 
-TEST_F(MinMaxIndexTest, CheckCmp_Greater)
+TEST_F(MinMaxIndexTest, CheckCmpGreater)
 try
 {
     struct ValuesAndResults
@@ -2509,46 +2506,46 @@ try
         {
             .value = 0,
             .results = {
-                RSResult::AllNull,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::All,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::All,
-                RSResult::AllNull,
+                RSResultConst::AllNull,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::All,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::All,
+                RSResultConst::AllNull,
             },
         },
         {
             .value = 5,
             .results = {
-                RSResult::NoneNull,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::NoneNull,
+                RSResultConst::NoneNull,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::NoneNull,
             },
         },
         {
             .value = 11,
             .results = {
-                RSResult::NoneNull,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::NoneNull,
+                RSResultConst::NoneNull,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::NoneNull,
             },
         },
     };
@@ -2567,14 +2564,14 @@ try
                 min_max_check_test_data[j].column_data,
                 min_max_check_test_data[j].del_mark,
                 value,
-                magic_enum::enum_name(actual_results[j]),
-                magic_enum::enum_name(expected_results[j]));
+                actual_results[j].toString(),
+                expected_results[j].toString());
         }
     }
 }
 CATCH
 
-TEST_F(MinMaxIndexTest, CheckCmp_GreaterEqual)
+TEST_F(MinMaxIndexTest, CheckCmpGreaterEqual)
 try
 {
     struct ValuesAndResults
@@ -2587,61 +2584,61 @@ try
         {
             .value = 1,
             .results = {
-				RSResult::AllNull,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::All,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::All,
-                RSResult::AllNull,
+				RSResultConst::AllNull,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::All,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::All,
+                RSResultConst::AllNull,
             },
         },
         {
             .value = 2,
             .results = {
-				RSResult::SomeNull,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::Some,
-                RSResult::All,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::NoneNull,
+				RSResultConst::SomeNull,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::Some,
+                RSResultConst::All,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::NoneNull,
             },
         },
         {
             .value = 10,
             .results = {
-				RSResult::NoneNull,
-                RSResult::Some,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::Some,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::NoneNull,
+				RSResultConst::NoneNull,
+                RSResultConst::Some,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::Some,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::NoneNull,
             },
         },
         {
             .value = 11,
             .results = {
-				RSResult::NoneNull,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::None,
-                RSResult::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
-                RSResult::None,
-                RSResult::NoneNull,
+				RSResultConst::NoneNull,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::None,
+                RSResultConst::SomeNull, // All the fields are null, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::SomeNull, // All the fields are deleted, the default value is null, meet the compatibility check
+                RSResultConst::None,
+                RSResultConst::NoneNull,
             },
         },
     };
@@ -2660,8 +2657,8 @@ try
                 min_max_check_test_data[j].column_data,
                 min_max_check_test_data[j].del_mark,
                 value,
-                magic_enum::enum_name(actual_results[j]),
-                magic_enum::enum_name(expected_results[j]));
+                actual_results[j].toString(),
+                expected_results[j].toString());
         }
     }
 }

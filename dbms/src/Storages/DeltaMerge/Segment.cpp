@@ -2956,12 +2956,12 @@ std::pair<std::vector<Range>, std::vector<IdSetPtr>> parseDMFilePackInfo(
         {
             const auto & pack_stat = pack_stats[pack_id];
             preceded_rows += pack_stat.rows;
-            if (!isUse(pack_res[pack_id]))
+            if (!pack_res[pack_id].needToRead())
             {
                 continue;
             }
 
-            if (handle_res[pack_id] == RSResult::Some || pack_stat.not_clean > 0
+            if (handle_res[pack_id] == RSResultConst::Some || pack_stat.not_clean > 0
                 || pack_filter.getMaxVersion(pack_id) > start_ts)
             {
                 // We need to read this pack to do RowKey or MVCC filter.

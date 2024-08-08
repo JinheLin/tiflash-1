@@ -317,7 +317,7 @@ RSOperatorPtr parseTiExpr(
             // Therefore, if we support IsNull with sub expr, there could be correctness problem.
             // For example, we have a table t(a int, b int), and the data is: (1, 2), (0, null), (null, 1)
             // and then we execute `select * from t where (a > 1) is null`, we want to get (null, 1)
-            // but in RSResult (a > 1), we will get the result RSResult::None, and then we think the result is the empty set.
+            // but in RSResult (a > 1), we will get the result RSResultConst::None, and then we think the result is the empty set.
             if (unlikely(expr.children_size() != 1))
             {
                 return createUnsupported(
