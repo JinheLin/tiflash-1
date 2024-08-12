@@ -52,6 +52,7 @@ SegmentReadTask::SegmentReadTask(
     , read_snapshot(read_snapshot_)
     , dm_context(dm_context_)
     , ranges(ranges_)
+    , fetch_pages_status(FetchPagesStatus::Succeeded)
 {
     CurrentMetrics::add(CurrentMetrics::DT_SegmentReadTasks);
 }
@@ -143,6 +144,16 @@ SegmentReadTask::SegmentReadTask(
         .remote_page_sizes = std::move(remote_page_sizes),
     });
 
+    if (extra_remote_info->remote_page_ids.empty() && !needFetchMemTableSet())
+    {
+        fetch_pages_status = FetchPagesStatus::Succeeded;
+        LOG_DEBUG(read_snapshot->log, "Neither ColumnFileTiny or ColumnFileInMemory need to be fetched from WN.");
+    }
+    else
+    {
+        fetch_pages_status = FetchPagesStatus::Pending;
+    }
+    
     LOG_DEBUG(
         read_snapshot->log,
         "memory_cfs_count={} memory_page_count={} persisted_cfs_count={} persisted_page_count={} remote_page_ids={} "
@@ -324,17 +335,13 @@ void SegmentReadTask::doInitInputStream(
 
 void SegmentReadTask::fetchPages()
 {
-    // Not remote segment.
-    if (!extra_remote_info.has_value())
-    {
+    if (fetchPagesSucceeded())
         return;
-    }
-    if (extra_remote_info->remote_page_ids.empty() && !needFetchMemTableSet())
-    {
-        LOG_DEBUG(read_snapshot->log, "Neither ColumnFileTiny or ColumnFileInMemory need to be fetched from WN.");
-        return;
-    }
 
+    if (fetchPagesDoing())
+        return ???;
+
+    
     Stopwatch watch_work{CLOCK_MONOTONIC_COARSE};
     SCOPE_EXIT({
         // This metric is per-segment.
@@ -770,4 +777,10 @@ GlobalSegmentID SegmentReadTask::getGlobalSegmentID() const
     };
 }
 
+SegmentReadTask::FetchPagesStatus SegmentReadTask::checkFetchPagesStatus()
+{
+    std::lock_guard lock(fetch_pages_status_mutex);
+    if (fetch_pages_status == FetchPagesStatus::NotRemoteSeg || fetch_pages_status == FetchPagesStatus::NoCFToFetch)
+        return 
+}
 } // namespace DB::DM

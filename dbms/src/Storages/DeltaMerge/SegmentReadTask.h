@@ -55,6 +55,12 @@ struct ExtraRemoteSegmentInfo
     std::vector<size_t> remote_page_sizes;
 };
 
+class SegmentReadTaskStatus
+{
+public:
+private:
+    enum class FetchPagesStatus
+};
 struct SegmentReadTask
 {
 public:
@@ -145,6 +151,33 @@ private:
         const PushDownFilterPtr & push_down_filter,
         ReadMode read_mode,
         size_t expected_block_size);
+
+    FetchPagesStatus checkFetchPagesStatus();
+    enum class FetchPagesStatus : UInt8
+    {
+        Pending = 1,
+        Doing = 2,
+        Succeeded = 3,
+        Failed = 4,
+    };
+    bool fetchPagesSucceeded() const
+    {
+        std::lock_guard lock(fetch_pages_status_mutex);
+        fetch_pages_status = FetchPagesStatus::Succeeded;
+    }
+
+    bool fetchPagesDoing() const
+    {
+        std::lock_guard lock(fetch_pages_status_mutex);
+        fetch_pages_status = FetchPagesStatus::Doing;
+    }
+
+    //
+    // Pending, Failed -> fetch
+    // Doing -> wait
+
+    mutable std::mutex fetch_pages_status_mutex;
+    FetchPagesStatus fetch_pages_status;
 
     BlockInputStreamPtr input_stream;
 
