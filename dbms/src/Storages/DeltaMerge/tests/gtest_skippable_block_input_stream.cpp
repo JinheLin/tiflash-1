@@ -252,7 +252,8 @@ protected:
             filter_cloumn_stream,
             rest_column_stream,
             bitmap_filter,
-            "test");
+            "test",
+            dm_context->scan_context);
         late_materialization_stream->readPrefix();
         auto normal_stream = getInputStream(segment, snapshot, columns_to_read, read_ranges);
         normal_stream->readPrefix();

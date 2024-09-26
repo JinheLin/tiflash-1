@@ -27,24 +27,30 @@ LateMaterializationBlockInputStream::LateMaterializationBlockInputStream(
     BlockInputStreamPtr filter_column_stream_,
     SkippableBlockInputStreamPtr rest_column_stream_,
     const BitmapFilterPtr & bitmap_filter_,
-    const String & req_id_)
+    const String & req_id_,
+    const ScanContextPtr & scan_context_)
     : header(toEmptyBlock(columns_to_read))
     , filter_column_name(filter_column_name_)
     , filter_column_stream(std::move(filter_column_stream_))
     , rest_column_stream(std::move(rest_column_stream_))
     , bitmap_filter(bitmap_filter_)
     , log(Logger::get(NAME, req_id_))
+    , scan_context(scan_context_)
 {}
 
 Block LateMaterializationBlockInputStream::read()
 {
+    Stopwatch sw;
+    SCOPE_EXIT({scan_context->segment_read_time_ns += sw.elapsed(); });
     Block filter_column_block;
     FilterPtr filter = nullptr;
 
     // Until non-empty block after filtering or end of stream.
     while (true)
     {
+        Stopwatch sw_filter;
         filter_column_block = filter_column_stream->read(filter, true);
+        scan_context->lm_filter_and_read_time_ns += sw_filter.elapsed();
 
         // If filter_column_block is empty, it means that the stream has ended.
         // No need to read the rest_column_stream, just return an empty block.
