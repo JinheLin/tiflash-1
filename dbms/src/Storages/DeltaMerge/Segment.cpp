@@ -3407,7 +3407,8 @@ BlockInputStreamPtr Segment::getLateMaterializationStream(
         rest_column_stream,
         bitmap_filter,
         bitmap_filter_of_inverted_index,
-        dm_context.tracing_id);
+        dm_context.tracing_id,
+        dm_context.scan_context);
 }
 
 
@@ -3552,6 +3553,10 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
     BitmapFilterPtr bitmap_filter_of_inverted_index;
     if (filter && filter->rs_operator_for_inverted_index)
     {
+        Stopwatch sw;
+        SCOPE_EXIT({
+            dm_context.scan_context->inverted_index_read_time_ns += sw.elapsed();
+        });
         ColId inverted_col_id;
         std::tie(bitmap_filter_of_inverted_index, inverted_col_id) = buildLMBitmapByInvertedIndex(
             dm_context,

@@ -34,13 +34,20 @@ namespace DB::DM
 class ScanContext
 {
 public:
-    std::atomic<uint64_t> dmfile_data_scanned_rows{0};
+    std::atomic<uint64_t> dmfile_data_scanned_rows{0}; // rest columns in lm
     std::atomic<uint64_t> dmfile_data_skipped_rows{0};
     std::atomic<uint64_t> dmfile_mvcc_scanned_rows{0};
     std::atomic<uint64_t> dmfile_mvcc_skipped_rows{0};
     std::atomic<uint64_t> dmfile_lm_filter_scanned_rows{0};
     std::atomic<uint64_t> dmfile_lm_filter_skipped_rows{0};
     std::atomic<uint64_t> total_dmfile_read_time_ns{0};
+    std::atomic<uint64_t> dmfile_data_read_time_ns{0};
+    std::atomic<uint64_t> dmfile_mvcc_read_time_ns{0};
+    std::atomic<uint64_t> dmfile_lm_read_time_ns{0};
+
+    std::atomic<uint64_t> lm_filter_and_read_time_ns{0};
+    std::atomic<uint64_t> inverted_index_read_time_ns{0};
+    std::atomic<uint64_t> segment_read_time_ns{0};
 
     std::atomic<uint64_t> total_rs_pack_filter_check_time_ns{0};
     std::atomic<uint64_t> rs_pack_filter_none{0};
@@ -116,6 +123,13 @@ public:
         // TODO: rs_pack_filter_none, rs_pack_filter_some, rs_pack_filter_all,rs_pack_filter_all_null
         // rs_dmfile_read_with_all
         total_dmfile_read_time_ns = tiflash_scan_context_pb.total_dmfile_read_ms() * 1000000;
+        //std::atomic<uint64_t> dmfile_data_read_time_ns{0};
+        //std::atomic<uint64_t> dmfile_mvcc_read_time_ns{0};
+        //std::atomic<uint64_t> dmfile_lm_read_time_ns{0};
+        //std::atomic<uint64_t> lm_filter_and_read_time_ns{0};
+        // inverted_index_read_time_ns
+        //segment_read_time_ns
+
         create_snapshot_time_ns = tiflash_scan_context_pb.total_build_snapshot_ms() * 1000000;
         total_remote_region_num = tiflash_scan_context_pb.remote_regions();
         total_local_region_num = tiflash_scan_context_pb.local_regions();
@@ -169,6 +183,12 @@ public:
         tiflash_scan_context_pb.set_total_dmfile_rs_check_ms(total_rs_pack_filter_check_time_ns / 1000000);
         // TODO: pack_filter_none, pack_filter_some, pack_filter_all
         tiflash_scan_context_pb.set_total_dmfile_read_ms(total_dmfile_read_time_ns / 1000000);
+        // std::atomic<uint64_t> dmfile_data_read_time_ns{0};
+        // std::atomic<uint64_t> dmfile_mvcc_read_time_ns{0};
+        // std::atomic<uint64_t> dmfile_lm_read_time_ns{0};
+        // std::atomic<uint64_t> lm_filter_and_read_time_ns{0};
+        // inverted_index_read_time_ns
+        // segment_read_time_ns
         tiflash_scan_context_pb.set_total_build_snapshot_ms(create_snapshot_time_ns / 1000000);
         tiflash_scan_context_pb.set_remote_regions(total_remote_region_num);
         tiflash_scan_context_pb.set_local_regions(total_local_region_num);
@@ -226,6 +246,12 @@ public:
         rs_pack_filter_all_null += other.rs_pack_filter_all_null;
         rs_dmfile_read_with_all += other.rs_dmfile_read_with_all;
         total_dmfile_read_time_ns += other.total_dmfile_read_time_ns;
+        dmfile_data_read_time_ns += other.dmfile_data_read_time_ns;
+        dmfile_mvcc_read_time_ns += other.dmfile_mvcc_read_time_ns;
+        dmfile_lm_read_time_ns += other.dmfile_lm_read_time_ns;
+        lm_filter_and_read_time_ns += other.lm_filter_and_read_time_ns;
+        inverted_index_read_time_ns += other.inverted_index_read_time_ns;
+        segment_read_time_ns += other.segment_read_time_ns;
 
         total_local_region_num += other.total_local_region_num;
         total_remote_region_num += other.total_remote_region_num;
@@ -283,6 +309,11 @@ public:
         // TODO: rs_pack_filter_none, rs_pack_filter_some, rs_pack_filter_all, rs_pack_filter_all_null
         // rs_dmfile_read_with_all
         total_dmfile_read_time_ns += other.total_dmfile_read_ms() * 1000000;
+        //std::atomic<uint64_t> dmfile_data_read_time_ns{0};
+        //std::atomic<uint64_t> dmfile_mvcc_read_time_ns{0};
+        //std::atomic<uint64_t> dmfile_lm_read_time_ns{0};
+        //std::atomic<uint64_t> lm_filter_and_read_time_ns{0};
+        //segment_read_time_ns
         create_snapshot_time_ns += other.total_build_snapshot_ms() * 1000000;
         total_local_region_num += other.local_regions();
         total_remote_region_num += other.remote_regions();

@@ -130,6 +130,7 @@ private:
 
     void addScannedRows(UInt64 rows);
     void addSkippedRows(UInt64 rows);
+    void addReadTime(UInt64 ns);
 
     void initAllMatchBlockInfo();
     size_t getReadPackLimit(size_t start_pack_id);

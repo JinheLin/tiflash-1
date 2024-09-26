@@ -18,7 +18,7 @@
 #include <Storages/DeltaMerge/BitmapFilter/BitmapFilter.h>
 #include <Storages/DeltaMerge/DeltaMergeDefines.h>
 #include <Storages/DeltaMerge/SkippableBlockInputStream.h>
-
+#include <Storages/DeltaMerge/ScanContext.h>
 namespace DB::DM
 {
 
@@ -40,7 +40,8 @@ public:
         SkippableBlockInputStreamPtr rest_column_stream_,
         const BitmapFilterPtr & bitmap_filter_,
         const BitmapFilterPtr & bitmap_filter_of_inverted_index_,
-        const String & req_id_);
+        const String & req_id_,
+        const ScanContextPtr & scan_context_);
 
     String getName() const override { return NAME; }
 
@@ -66,6 +67,8 @@ private:
     Block readFilterColumn(DB::FilterPtr & f, bool r);
 
     const LoggerPtr log;
+
+    ScanContextPtr scan_context;
 };
 
 } // namespace DB::DM

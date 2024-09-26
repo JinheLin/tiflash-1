@@ -285,7 +285,11 @@ bool DMFileReader::isCacheableColumn(const ColumnDefine & cd)
 Block DMFileReader::read()
 {
     Stopwatch watch;
-    SCOPE_EXIT(scan_context->total_dmfile_read_time_ns += watch.elapsed(););
+    SCOPE_EXIT({
+        auto ns = watch.elapsed();
+        scan_context->total_dmfile_read_time_ns += ns;
+        addReadTime(ns);
+    });
 
     /// 1. Skip filtered out packs.
     if (size_t skip_rows; !getSkippedRows(skip_rows))
@@ -722,6 +726,24 @@ void DMFileReader::addSkippedRows(UInt64 rows)
         break;
     case ReadTag::LMFilter:
         scan_context->dmfile_lm_filter_skipped_rows += rows;
+        break;
+    default:
+        break;
+    }
+}
+
+void DMFileReader::addReadTime(UInt64 ns)
+{
+    switch (read_tag)
+    {
+    case ReadTag::Query:
+        scan_context->dmfile_data_read_time_ns += ns;
+        break;
+    case ReadTag::MVCC:
+        scan_context->dmfile_mvcc_read_time_ns += ns;
+        break;
+    case ReadTag::LMFilter:
+        scan_context->dmfile_lm_read_time_ns += ns;
         break;
     default:
         break;

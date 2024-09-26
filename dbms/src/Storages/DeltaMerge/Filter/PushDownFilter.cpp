@@ -198,6 +198,8 @@ PushDownFilterPtr PushDownFilter::build(
         extra_cast,
         columns_after_cast);
 
+    if (context.getSettingsRef().dt_enable_inverted_index)
+    {
     std::tie(res->rs_operator_for_inverted_index, res->read_columns_for_inverted_index, res->cp_index_to_origin)
         = buildRSOperatorAndColumnDefinesForInvertedIndex(
             pushed_down_filters,
@@ -205,6 +207,7 @@ PushDownFilterPtr PushDownFilter::build(
             table_scan_column_info,
             columns_to_read,
             tracing_logger);
+    }
     LOG_DEBUG(
         tracing_logger,
         "rs_operator_for_inverted_index: {}, read_columns_for_inverted_index: {}, cp_index_to_origin: {}",
