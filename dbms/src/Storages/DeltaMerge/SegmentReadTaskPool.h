@@ -210,6 +210,8 @@ private:
 
     bool isRUExhaustedImpl();
 
+    Block readLargeEnoughBlock(BlockInputStreamPtr & stream);
+
     const int extra_table_id_index;
     ColumnDefines columns_to_read;
     PushDownFilterPtr filter;

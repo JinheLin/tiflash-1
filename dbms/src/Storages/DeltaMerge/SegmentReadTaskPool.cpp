@@ -232,11 +232,25 @@ MergingSegments::iterator SegmentReadTaskPool::scheduleSegment(
     return target;
 }
 
+Block SegmentReadTaskPool::readLargeEnoughBlock(BlockInputStreamPtr & stream)
+{
+    Blocks blocks;
+    for (size_t read_rows = 0; read_rows < expected_block_size / 6 && blocks.size() < 3;
+         read_rows += blocks.back().rows())
+    {
+        auto block = stream->read();
+        if (!block)
+            break;
+        blocks.push_back(std::move(block));
+    }
+    return blocks.empty() ? Block{} : vstackBlocks(std::move(blocks));
+}
+
 bool SegmentReadTaskPool::readOneBlock(BlockInputStreamPtr & stream, const SegmentReadTaskPtr & seg)
 {
     MemoryTrackerSetter setter(true, mem_tracker.get());
     FAIL_POINT_PAUSE(FailPoints::pause_when_reading_from_dt_stream);
-    auto block = stream->read();
+    auto block = readLargeEnoughBlock(stream);
     if (block)
     {
         pushBlock(std::move(block));
