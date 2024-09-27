@@ -40,7 +40,7 @@ extern const int NOT_IMPLEMENTED;
 
 namespace DB::S3
 {
-class S3RandomAccessFile final : public RandomAccessFile
+class S3RandomAccessFile : public RandomAccessFile
 {
 public:
     static RandomAccessFilePtr create(const String & remote_fname);
