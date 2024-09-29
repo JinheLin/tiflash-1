@@ -680,4 +680,9 @@ size_t StableValueSpace::avgRowBytes(const ColumnDefines & read_columns)
     return avg_bytes;
 }
 
-} // namespace DB::DM
+    void StableValueSpace::buildDMFileInvertedIndex(const Context & context, ColId col_id)
+    {
+        for (const auto & dmfile : files)
+            DMFile::buildInvertedIndex(context, dmfile, col_id);
+    }
+}

@@ -4218,4 +4218,157 @@ try
 }
 CATCH
 
+
+TEST_F(DeltaMergeStoreTest, InvertedIndex)
+try
+{
+    auto log = Logger::get(GET_GTEST_FULL_NAME);
+    auto table_column_defines = DMTestEnv::getDefaultColumns();
+    ColumnDefine cd_int(1, "col_int", std::make_shared<DataTypeInt64>());
+    table_column_defines->push_back(cd_int);
+
+    store = reload(table_column_defines);
+
+    auto create_random_data = [&](size_t rows) {
+        std::vector<Int64> v(rows);
+        std::iota(v.begin(), v.end(), 0);
+        std::shuffle(v.begin(), v.end(), std::mt19937{std::random_device{}()});
+        LOG_DEBUG(log, "col_int: {}", v);
+        return v;
+    };
+
+    auto create_block = [&](UInt64 beg, UInt64 end, UInt64 ts) {
+        auto block = DMTestEnv::prepareSimpleWriteBlock(beg, end, false, ts);
+        auto data = create_random_data(end - beg);
+        auto col = createColumn<Int64>(data, cd_int.name, cd_int.id);
+        block.insert(col);
+        block.checkNumberOfRows();
+        return block;
+    };
+
+    const auto & read_col1 = (*table_column_defines)[0];
+    const auto & read_col2 = (*table_column_defines)[3];
+    auto read_block = [&](PushDownFilterPtr filter) {
+        auto in = store->read(
+            *db_context,
+            db_context->getSettingsRef(),
+            {read_col1, read_col2},
+            {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+            /* num_streams= */ 1,
+            /* start_ts= */ std::numeric_limits<UInt64>::max(),
+            filter,
+            std::vector<RuntimeFilterPtr>{},
+            0,
+            "",
+            /* keep_order= */ false,
+            /* is_fast_scan= */ false,
+            /* expected_block_size= */ 1024)[0];
+
+        Blocks blocks;
+        in->readPrefix();
+        while (true)
+        {
+            auto b = in->read();
+            if (!b)
+                break;
+            blocks.push_back(std::move(b));
+        }
+        in->readSuffix();
+
+        return vstackBlocks(std::move(blocks));
+    };
+
+    const String table_info_json = R"json({
+    "cols":[
+        {"comment":"","default":null,"default_bit":null,"id":1,"name":{"L":"col_int","O":"col_int"},"offset":-1,"origin_default":null,"state":0,"type":{"Charset":null,"Collate":null,"Decimal":5,"Elems":null,"Flag":1,"Flen":0,"Tp":8}}
+    ],
+    "pk_is_handle":false,"index_info":[],"is_common_handle":false,
+    "name":{"L":"t_111","O":"t_111"},"partition":null,
+    "comment":"Mocked.","id":30,"schema_version":-1,"state":0,"tiflash_replica":{"Count":0},"update_timestamp":1636471547239654
+})json";
+
+    auto create_filter = [&](Int64 value) {
+        auto filter = generatePushDownFilter(
+            *db_context,
+            table_info_json,
+            fmt::format("select _tidb_rowid from default.t_111 where col_int >= {}", value));
+        RUNTIME_CHECK(filter->extra_cast == nullptr);
+        RUNTIME_CHECK(filter->rs_operator != nullptr);
+        const auto * rs_unsupported = typeid_cast<const Unsupported *>(filter->rs_operator.get());
+        RUNTIME_CHECK(rs_unsupported == nullptr, filter->rs_operator->toDebugString());
+        RUNTIME_CHECK(filter->before_where != nullptr);
+
+        RUNTIME_CHECK(filter->rs_operator_for_inverted_index != nullptr);
+        RUNTIME_CHECK(filter->read_columns_for_inverted_index.size() == 2);
+
+        LOG_DEBUG(
+            log,
+            "value={} rs_operator={} before_where={} filter_columns={} inverted={} and {}",
+            value,
+            filter->rs_operator->toDebugString(),
+            filter->before_where->dumpActions(),
+            *(filter->filter_columns),
+            filter->rs_operator_for_inverted_index->toDebugString(),
+            filter->read_columns_for_inverted_index);
+        return filter;
+    };
+
+    DB::registerFunctions();
+
+    constexpr Int64 num_rows = 128;
+
+    auto block = create_block(0, num_rows, 1);
+    store->write(*db_context, db_context->getSettingsRef(), block);
+
+    store->mergeDeltaAll(*db_context);
+    store->buildInvertedIndex(*db_context, 1);
+
+    auto check = [&](PushDownFilterPtr push_down_filter) {
+        ASSERT_NE(push_down_filter->rs_operator_for_inverted_index, nullptr);
+        auto block_by_inverted = read_block(push_down_filter);
+        LOG_DEBUG(log, "block_by_inverted: {}", block_by_inverted.dumpStructure());
+
+        push_down_filter->rs_operator_for_inverted_index = nullptr;
+        auto block = read_block(push_down_filter);
+        LOG_DEBUG(log, "block: {}", block.dumpStructure());
+
+        ASSERT_EQ(block_by_inverted.rows(), block.rows());
+        auto check_column = [&](const String & name) {
+            const auto * v1 = toColumnVectorDataPtr<Int64>(block_by_inverted.getByName(name).column);
+            ASSERT_NE(v1, nullptr);
+            const auto * v2 = toColumnVectorDataPtr<Int64>(block.getByName(name).column);
+            ASSERT_NE(v2, nullptr);
+            ASSERT_EQ(*v1, *v2);
+        };
+        if (block)
+        {
+            check_column(read_col1.name);
+            check_column(read_col2.name);
+        }
+    };
+
+    {
+        auto filter_all = create_filter(0);
+        check(filter_all);
+
+        auto filter_some = create_filter(64);
+        check(filter_some);
+
+        auto filter_none = create_filter(128);
+        check(filter_none);
+    }
+    store = reload(table_column_defines);
+    {
+        auto filter_all = create_filter(0);
+        check(filter_all);
+
+        auto filter_some = create_filter(64);
+        check(filter_some);
+
+        auto filter_none = create_filter(128);
+        check(filter_none);
+    }
+}
+CATCH
+
 } // namespace DB::DM::tests

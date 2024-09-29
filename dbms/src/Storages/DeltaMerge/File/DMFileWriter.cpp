@@ -64,7 +64,17 @@ DMFileWriter::DMFileWriter(
         auto type = removeNullable(cd.type);
         bool do_index = cd.id == EXTRA_HANDLE_COLUMN_ID || type->isInteger() || type->isDateOrDateTime();
 
-        addStreams(cd.id, cd.type, do_index);
+        addStreams(
+            cd.id,
+            cd.type,
+            do_index,
+            dmfile,
+            options.compression_settings,
+            options.max_compress_block_size,
+            file_provider,
+            write_limiter,
+            false,
+            column_streams);
         dmfile->meta->getColumnStats().emplace(
             cd.id,
             ColumnStat{
@@ -109,7 +119,17 @@ DMFileWriter::WriteBufferFromFileBasePtr DMFileWriter::createMetaFile()
     }
 }
 
-void DMFileWriter::addStreams(ColId col_id, DataTypePtr type, bool do_index)
+void DMFileWriter::addStreams(
+    ColId col_id,
+    DataTypePtr type,
+    bool do_index,
+    const DMFilePtr & dmfile,
+    const CompressionSettings & compression_settings,
+    size_t max_compress_block_size,
+    const FileProviderPtr & file_provider,
+    const WriteLimiterPtr & write_limiter,
+    bool for_inverted_index,
+    ColumnStreams & column_streams)
 {
     auto callback = [&](const IDataType::SubstreamPath & substream_path) {
         const auto stream_name = DMFile::getFileNameBase(col_id, substream_path);
@@ -118,11 +138,12 @@ void DMFileWriter::addStreams(ColId col_id, DataTypePtr type, bool do_index)
             dmfile,
             stream_name,
             type,
-            options.compression_settings,
-            options.max_compress_block_size,
+            compression_settings,
+            max_compress_block_size,
             file_provider,
             write_limiter,
-            do_index && substream_can_index);
+            do_index && substream_can_index,
+            for_inverted_index);
         column_streams.emplace(stream_name, std::move(stream));
     };
 

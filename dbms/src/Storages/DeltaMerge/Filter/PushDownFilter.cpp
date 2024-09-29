@@ -24,13 +24,57 @@
 
 namespace DB::DM
 {
+namespace
+{
+std::tuple<RSOperatorPtr, ColumnDefines, ExpressionActionsPtr> buildRSOperatorAndColumnDefinesForInvertedIndex(
+    const google::protobuf::RepeatedPtrField<tipb::Expr> & pushed_down_filters,
+    const TimezoneInfo & timezone_info,
+    const TiDB::ColumnInfos & table_scan_column_info,
+    const ColumnDefines & columns_to_read,
+    const LoggerPtr & tracing_logger)
+{
+    std::unordered_set<ColumnID> filter_col_id_set;
+    for (const auto & expr : pushed_down_filters)
+        getColumnIDsFromExpr(expr, table_scan_column_info, filter_col_id_set);
+
+    // TODO: maybe extract some filters?
+    if (filter_col_id_set.size() == 1)
+    {
+        auto rs_operator = RSOperator::buildForInvertedIndex(
+            pushed_down_filters,
+            timezone_info,
+            table_scan_column_info,
+            columns_to_read,
+            tracing_logger);
+        auto col_id = *filter_col_id_set.begin();
+        auto it = std::find_if(columns_to_read.cbegin(), columns_to_read.cend(), [col_id](const ColumnDefine & cd) {
+            return cd.id == col_id;
+        });
+        RUNTIME_CHECK(it != columns_to_read.cend(), col_id, columns_to_read);
+        auto cd_index = getInvertedIndexColumnDefine(it->id, it->type);
+        auto cp_index_to_origin
+            = std::make_shared<ExpressionActions>(NamesAndTypes{NameAndTypePair{cd_index.name, cd_index.type}});
+        cp_index_to_origin->add(ExpressionAction::copyColumn(cd_index.name, it->name));
+        return std::make_tuple(
+            rs_operator,
+            ColumnDefines{
+                cd_index,
+                getInvertedRowIDColumnDefine(it->id),
+            },
+            cp_index_to_origin);
+    }
+    return {};
+}
+} // namespace
+
 PushDownFilterPtr PushDownFilter::build(
     const RSOperatorPtr & rs_operator,
     const TiDB::ColumnInfos & table_scan_column_info,
     const google::protobuf::RepeatedPtrField<tipb::Expr> & pushed_down_filters,
     const ColumnDefines & columns_to_read,
     const Context & context,
-    const LoggerPtr & tracing_logger)
+    const LoggerPtr & tracing_logger,
+    const TimezoneInfo & timezone)
 {
     if (pushed_down_filters.empty())
     {
@@ -145,7 +189,7 @@ PushDownFilterPtr PushDownFilter::build(
         }
     }
 
-    return std::make_shared<PushDownFilter>(
+    auto res = std::make_shared<PushDownFilter>(
         rs_operator,
         before_where,
         project_after_where,
@@ -153,6 +197,21 @@ PushDownFilterPtr PushDownFilter::build(
         filter_column_name,
         extra_cast,
         columns_after_cast);
+
+    std::tie(res->rs_operator_for_inverted_index, res->read_columns_for_inverted_index, res->cp_index_to_origin)
+        = buildRSOperatorAndColumnDefinesForInvertedIndex(
+            pushed_down_filters,
+            timezone,
+            table_scan_column_info,
+            columns_to_read,
+            tracing_logger);
+    LOG_DEBUG(
+        tracing_logger,
+        "rs_operator_for_inverted_index: {}, read_columns_for_inverted_index: {}, cp_index_to_origin: {}",
+        res->rs_operator_for_inverted_index->toDebugString(),
+        res->read_columns_for_inverted_index,
+        res->cp_index_to_origin->dumpActions());
+    return res;
 }
 
 PushDownFilterPtr PushDownFilter::build(
@@ -188,14 +247,17 @@ PushDownFilterPtr PushDownFilter::build(
             merged_filters,
             columns_to_read,
             context,
-            tracing_logger);
+            tracing_logger,
+            dag_query->timezone_info);
     }
+
     return PushDownFilter::build(
         rs_operator,
         columns_to_read_info,
         pushed_down_filters,
         columns_to_read,
         context,
-        tracing_logger);
+        tracing_logger,
+        dag_query->timezone_info);
 }
 } // namespace DB::DM

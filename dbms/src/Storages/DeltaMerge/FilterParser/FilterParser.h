@@ -44,6 +44,13 @@ public:
         const TiDB::ColumnInfos & scan_column_infos,
         AttrCreatorByColumnID && creator,
         const LoggerPtr & log);
+    static RSOperatorPtr parseFilterExprs(
+        const google::protobuf::RepeatedPtrField<tipb::Expr> & filter_exprs,
+        const TimezoneInfo & timezone_info,
+        const TiDB::ColumnInfos & scan_column_infos,
+        FilterParser::AttrCreatorByColumnID && creator,
+        const LoggerPtr & log);
+
 
     // only for runtime filter in predicate
     static RSOperatorPtr parseRFInExpr(

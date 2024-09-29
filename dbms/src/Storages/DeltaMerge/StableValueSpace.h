@@ -263,6 +263,8 @@ public:
 
     size_t avgRowBytes(const ColumnDefines & read_columns);
 
+    void buildDMFileInvertedIndex(const Context & context, ColId col_id);
+
 private:
     UInt64 serializeMetaToBuf(WriteBuffer & buf) const;
 

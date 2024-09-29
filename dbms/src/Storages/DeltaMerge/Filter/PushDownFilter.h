@@ -61,7 +61,8 @@ public:
         const google::protobuf::RepeatedPtrField<tipb::Expr> & pushed_down_filters,
         const ColumnDefines & columns_to_read,
         const Context & context,
-        const LoggerPtr & tracing_logger);
+        const LoggerPtr & tracing_logger,
+        const TimezoneInfo & timezone);
 
     // Use by StorageDeltaMerge.
     static DM::PushDownFilterPtr build(
@@ -87,6 +88,10 @@ public:
     const ExpressionActionsPtr extra_cast;
     // If the extra_cast is not null, the types of the columns may be changed
     const ColumnDefinesPtr columns_after_cast;
+
+    RSOperatorPtr rs_operator_for_inverted_index;
+    ColumnDefines read_columns_for_inverted_index;
+    ExpressionActionsPtr cp_index_to_origin;
 };
 
 } // namespace DB::DM

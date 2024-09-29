@@ -70,7 +70,7 @@ public:
         const String & tracing_id_,
         size_t max_sharing_column_bytes_,
         const ScanContextPtr & scan_context_,
-        ReadTag read_tag_);
+        const ReadTag read_tag_);
 
     Block getHeader() const { return toEmptyBlock(read_columns); }
 

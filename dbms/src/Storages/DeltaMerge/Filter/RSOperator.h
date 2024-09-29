@@ -61,6 +61,12 @@ public:
         const ColumnDefines & table_column_defines,
         bool enable_rs_filter,
         const LoggerPtr & tracing_logger);
+    static RSOperatorPtr buildForInvertedIndex(
+        const google::protobuf::RepeatedPtrField<tipb::Expr> & filter_exprs,
+        const TimezoneInfo & timezone_info,
+        const TiDB::ColumnInfos & scan_column_infos,
+        const ColumnDefines & table_column_defines,
+        const LoggerPtr & tracing_logger);
 };
 
 class ColCmpVal : public RSOperator

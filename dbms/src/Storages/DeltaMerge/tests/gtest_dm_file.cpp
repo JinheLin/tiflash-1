@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <magic_enum.hpp>
+#include <random>
 #include <vector>
 namespace DB
 {
@@ -1037,6 +1038,124 @@ try
             createColumns({
                 createColumn<Int64>(createNumbers<Int64>(0, num_rows_write)),
             }));
+    }
+}
+CATCH
+
+
+TEST_P(DMFileTest, InvertedIndex)
+try
+{
+    if (GetParam() != DMFileMode::DirectoryMetaV2)
+        return;
+
+    auto cols = DMTestEnv::getDefaultColumns(DMTestEnv::PkType::HiddenTiDBRowID, /*add_nullable*/ true);
+
+    const size_t num_rows_write = 128;
+
+    DMFileBlockOutputStream::BlockProperty block_property1;
+    block_property1.effective_num_rows = 1;
+    block_property1.gc_hint_version = 1;
+    block_property1.deleted_rows = 1;
+    DMFileBlockOutputStream::BlockProperty block_property2;
+    block_property2.effective_num_rows = 2;
+    block_property2.gc_hint_version = 2;
+    block_property2.deleted_rows = 2;
+    std::vector<DMFileBlockOutputStream::BlockProperty> block_propertys;
+    block_propertys.push_back(block_property1);
+    block_propertys.push_back(block_property2);
+
+    auto create_column_with_random_value = [](size_t rows) {
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::vector<UInt64> v(rows);
+        for (auto & i : v)
+            i = g() % 10000;
+        std::vector<Int32> null_map(rows, 0);
+        return DB::tests::createNullableColumn<UInt64>(v, null_map, "Nullable(UInt64)", 1);
+    };
+
+    {
+        Block block1 = DMTestEnv::prepareSimpleWriteBlock(0, num_rows_write / 2, false);
+        block1.insert(create_column_with_random_value(num_rows_write / 2));
+
+        Block block2 = DMTestEnv::prepareSimpleWriteBlock(num_rows_write / 2, num_rows_write, false);
+        block2.insert(create_column_with_random_value(num_rows_write - num_rows_write / 2));
+
+        auto stream = std::make_shared<DMFileBlockOutputStream>(dbContext(), dm_file, *cols);
+        stream->writePrefix();
+        stream->write(block1, block_property1);
+        stream->write(block2, block_property2);
+        stream->writeSuffix();
+
+        ASSERT_EQ(dm_file->getPackProperties().property_size(), 2);
+    }
+
+
+    {
+        const auto ranges = RowKeyRanges{RowKeyRange::newAll(false, 1)};
+        DMFileBlockInputStreamBuilder builder(dbContext());
+
+        auto stream = builder.build(dm_file, *cols, ranges, std::make_shared<ScanContext>());
+        auto block = stream->read();
+        ASSERT_EQ(block.columns(), 4);
+        const auto & handle = *toColumnVectorDataPtr<Int64>(block.getByPosition(0).column);
+        const auto & data = *toColumnVectorDataPtr<UInt64>(
+            static_cast<const ColumnNullable &>(*block.getByPosition(3).column).getNestedColumnPtr());
+        fmt::println("handle: {}", handle);
+        fmt::println("data: {}", data);
+
+        DMFile::buildInvertedIndex(dm_context->global_context, dm_file, 1);
+        fmt::println("dmfile: {}", dm_file->path());
+
+        auto inverted_cols = ColumnDefines{
+            getInvertedIndexColumnDefine(1, block.getByPosition(3).type),
+            getInvertedRowIDColumnDefine(1)};
+        auto inverted_stream = builder.build(dm_file, inverted_cols, ranges, std::make_shared<ScanContext>());
+        auto inverted_block = inverted_stream->read();
+        ASSERT_EQ(inverted_block.columns(), 2);
+        const auto & inverted_data = *toColumnVectorDataPtr<UInt64>(
+            static_cast<const ColumnNullable &>(*inverted_block.getByPosition(0).column).getNestedColumnPtr());
+        const auto & inverted_rowid = *toColumnVectorDataPtr<UInt32>(inverted_block.getByPosition(1).column);
+
+        fmt::println("inverted_data: {}", inverted_data);
+        fmt::println("inverted_rowid: {}", inverted_rowid);
+
+        ASSERT_TRUE(std::is_sorted(inverted_data.cbegin(), inverted_data.cend()));
+    }
+
+    /// Test restore the file from disk and read
+    {
+        dm_file = restoreDMFile();
+    }
+
+    {
+        const auto ranges = RowKeyRanges{RowKeyRange::newAll(false, 1)};
+        DMFileBlockInputStreamBuilder builder(dbContext());
+
+        auto stream = builder.build(dm_file, *cols, ranges, std::make_shared<ScanContext>());
+        auto block = stream->read();
+        ASSERT_EQ(block.columns(), 4);
+        const auto & handle = *toColumnVectorDataPtr<Int64>(block.getByPosition(0).column);
+        const auto & data = *toColumnVectorDataPtr<UInt64>(
+            static_cast<const ColumnNullable &>(*block.getByPosition(3).column).getNestedColumnPtr());
+        fmt::println("handle: {}", handle);
+        fmt::println("data: {}", data);
+
+        auto inverted_cols = ColumnDefines{
+            getInvertedIndexColumnDefine(1, block.getByPosition(3).type),
+            getInvertedRowIDColumnDefine(1)};
+        auto inverted_stream = builder.build(dm_file, inverted_cols, ranges, std::make_shared<ScanContext>());
+        auto inverted_block = inverted_stream->read();
+        ASSERT_EQ(inverted_block.columns(), 2);
+        const auto & inverted_data = *toColumnVectorDataPtr<UInt64>(
+            static_cast<const ColumnNullable &>(*inverted_block.getByPosition(0).column).getNestedColumnPtr());
+        const auto & inverted_rowid = *toColumnVectorDataPtr<UInt32>(inverted_block.getByPosition(1).column);
+
+        fmt::println("inverted_data: {}", inverted_data);
+        fmt::println("inverted_rowid: {}", inverted_rowid);
+
+        ASSERT_TRUE(std::is_sorted(inverted_data.cbegin(), inverted_data.cend()));
     }
 }
 CATCH

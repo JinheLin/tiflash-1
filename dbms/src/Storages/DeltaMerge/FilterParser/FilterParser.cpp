@@ -383,6 +383,24 @@ RSOperatorPtr FilterParser::parseDAGQuery(
         return createAnd(children);
 }
 
+RSOperatorPtr FilterParser::parseFilterExprs(
+    const google::protobuf::RepeatedPtrField<tipb::Expr> & filter_exprs,
+    const TimezoneInfo & timezone_info,
+    const TiDB::ColumnInfos & scan_column_infos,
+    FilterParser::AttrCreatorByColumnID && creator,
+    const LoggerPtr & log)
+{
+    RUNTIME_CHECK(!filter_exprs.empty());
+    /// By default, multiple conditions with operator "and"
+    RSOperators children;
+    children.reserve(filter_exprs.size());
+    for (const auto & filter : filter_exprs)
+    {
+        children.emplace_back(cop::parseTiExpr(filter, scan_column_infos, creator, timezone_info, log));
+    }
+    return children.size() == 1 ? children[0] : createAnd(children);
+}
+
 RSOperatorPtr FilterParser::parseRFInExpr(
     const tipb::RuntimeFilterType rf_type,
     const tipb::Expr & target_expr,

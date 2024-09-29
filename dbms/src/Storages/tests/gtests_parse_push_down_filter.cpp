@@ -124,8 +124,14 @@ DM::PushDownFilterPtr generatePushDownFilter(
 
     auto rs_operator
         = DM::FilterParser::parseDAGQuery(*dag_query, table_info.columns, std::move(create_attr_by_column_id), log);
-    auto push_down_filter
-        = DM::PushDownFilter::build(rs_operator, table_info.columns, pushed_down_filters, columns_to_read, ctx, log);
+    auto push_down_filter = DM::PushDownFilter::build(
+        rs_operator,
+        table_info.columns,
+        pushed_down_filters,
+        columns_to_read,
+        ctx,
+        log,
+        timezone_info);
     return push_down_filter;
 }
 

@@ -22,6 +22,9 @@
 #include <Storages/DeltaMerge/File/DMFileUtil.h>
 #include <Storages/DeltaMerge/File/DMFileV3IncrementWriter_fwd.h>
 #include <Storages/DeltaMerge/File/DMFile_fwd.h>
+#include <Storages/DeltaMerge/Filter/PushDownFilter.h>
+#include <Storages/DeltaMerge/Filter/RSOperator.h>
+#include <Storages/DeltaMerge/Index/RSIndex.h>
 #include <Storages/FormatVersion.h>
 #include <Storages/S3/S3Filename.h>
 #include <Storages/S3/S3RandomAccessFile.h>
@@ -38,6 +41,7 @@ int migrateServiceMain(DB::Context & context, const MigrateArgs & args);
 namespace DB::DM
 {
 class DMFileWithVectorIndexBlockInputStream;
+struct DMContext;
 namespace tests
 {
 class DMFileTest;
@@ -210,6 +214,46 @@ public:
 
     UInt32 metaVersion() const { return meta->metaVersion(); }
 
+    const LoggerPtr & getLogger() const { return log; }
+
+    std::mutex building_inverted_index_mutex;
+    bool building_inverted_index = false;
+
+    static void buildInvertedIndex(const Context & context, const DMFilePtr & dmfile, ColId col_id);
+
+    Strings getInvertedIndexFileNames(ColId original_col_id) const;
+    Strings getInvertedRowIDFileNames(ColId original_col_id) const;
+    Strings getInvertedFileNames(ColId origianl_col_id) const;
+
+    String subFilePath(const String & file_name) const { return path() + "/" + file_name; }
+    static RSIndex loadInvertedRSIndex(
+        const DMFilePtr & dmfile,
+        const FileProviderPtr & file_provider,
+        const MinMaxIndexCachePtr & index_cache,
+        bool set_cache_if_miss,
+        ColId col_id);
+    static RSResults filterByInvertedIndexMinMax(
+        const Context & context,
+        const DMFilePtr & dmfile,
+        ColId col_id,
+        const RSOperatorPtr & rs_operator);
+    static FileNameBase getFileNameBase(ColId col_id, const IDataType::SubstreamPath & substream = {})
+    {
+        return IDataType::getFileNameForStream(DB::toString(col_id), substream);
+    }
+    String colIndexPath(const FileNameBase & file_name_base) const
+    {
+        return subFilePath(colIndexFileName(file_name_base));
+    }
+    EncryptionPath encryptionIndexPath(const FileNameBase & file_name_base) const;
+
+    DMFileMeta & getMeta() { return *meta; }
+
+    bool isMerged(const String & fname) const
+    {
+        return typeid_cast<DMFileMetaV2 *>(meta.get())->merged_sub_file_infos.contains(fname);
+    }
+
 private:
     DMFile(
         UInt64 file_id_,
@@ -280,10 +324,6 @@ private:
     {
         return subFilePath(colDataFileName(file_name_base));
     }
-    String colIndexPath(const FileNameBase & file_name_base) const
-    {
-        return subFilePath(colIndexFileName(file_name_base));
-    }
     String colMarkPath(const FileNameBase & file_name_base) const
     {
         return subFilePath(colMarkFileName(file_name_base));
@@ -296,13 +336,7 @@ private:
 
     String encryptionBasePath() const;
     EncryptionPath encryptionDataPath(const FileNameBase & file_name_base) const;
-    EncryptionPath encryptionIndexPath(const FileNameBase & file_name_base) const;
     EncryptionPath encryptionMarkPath(const FileNameBase & file_name_base) const;
-
-    static FileNameBase getFileNameBase(ColId col_id, const IDataType::SubstreamPath & substream = {})
-    {
-        return IDataType::getFileNameForStream(DB::toString(col_id), substream);
-    }
 
     static String vectorIndexFileName(IndexID index_id) { return fmt::format("idx_{}.vector", index_id); }
     String vectorIndexPath(IndexID index_id) const { return subFilePath(vectorIndexFileName(index_id)); }
@@ -313,8 +347,6 @@ private:
     void setStatus(DMFileStatus status_) const { meta->status = status_; }
 
     void finalize();
-
-    String subFilePath(const String & file_name) const { return path() + "/" + file_name; }
 
     // It is the page_id that represent this file in the PageStorage. It could be the same as file id.
     const UInt64 page_id;

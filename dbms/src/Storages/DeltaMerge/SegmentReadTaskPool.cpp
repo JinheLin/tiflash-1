@@ -165,7 +165,7 @@ void SegmentReadTaskPool::finishSegment(const SegmentReadTaskPtr & seg)
         active_segment_ids.erase(seg->getGlobalSegmentID());
         pool_finished = active_segment_ids.empty() && tasks_wrapper.empty();
     }
-    LOG_DEBUG(log, "finishSegment pool_id={} segment={} pool_finished={}", pool_id, seg, pool_finished);
+    LOG_DEBUG(log, "finishSegment pool_id={} segment={} read_rows={} pool_finished={}", pool_id, seg, seg->read_rows, pool_finished);
     if (pool_finished)
     {
         q.finish();
@@ -239,6 +239,7 @@ bool SegmentReadTaskPool::readOneBlock(BlockInputStreamPtr & stream, const Segme
     auto block = stream->read();
     if (block)
     {
+        seg->read_rows += block.rows();
         pushBlock(std::move(block));
         return true;
     }

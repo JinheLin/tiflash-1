@@ -606,7 +606,7 @@ public:
 
     RowsAndBytes getRowsAndBytesInRange(const Context & db_context, const RowKeyRange & check_range, bool is_exact);
     RowsAndBytes getRowsAndBytesInRange(DMContext & dm_context, const RowKeyRange & check_range, bool is_exact);
-
+    void buildInvertedIndex(const Context & context, ColId col_id);
 #ifndef DBMS_PUBLIC_GTEST
 private:
 #endif

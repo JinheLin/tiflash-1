@@ -25,6 +25,7 @@
 #include <Flash/Coprocessor/DAGContext.h>
 #include <Flash/Pipeline/Exec/PipelineExecBuilder.h>
 #include <Functions/FunctionsConversion.h>
+#include <IO/IOThreadPools.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/SharedContexts/Disagg.h>
 #include <Interpreters/sortBlock.h>
@@ -65,7 +66,6 @@
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
-
 
 namespace ProfileEvents
 {
@@ -2291,6 +2291,20 @@ void DeltaMergeStore::createFirstSegment(DM::DMContext & dm_context)
         segment_id,
         0);
     addSegment(lock, first_segment);
+}
+
+void DeltaMergeStore::buildInvertedIndex(const Context & context, ColId col_id)
+{
+    IOPoolHelper::FutureContainer futures(log, segments.size());
+    auto dm_context = newDMContext(context, context.getSettingsRef());
+    LOG_INFO(log, "segment count: {}", segments.size());
+    for (auto & [end_of_range, segment] : segments)
+    {
+        auto f = BuildInvertedIndexPool::get().scheduleWithFuture(
+            [&] { segment->buildDMFileInvertedIndex(*dm_context, col_id); });
+        futures.add(std::move(f));
+    }
+    futures.getAllResults();
 }
 
 } // namespace DM

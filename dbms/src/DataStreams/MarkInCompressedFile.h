@@ -45,6 +45,11 @@ struct MarkInCompressedFile
     }
 };
 
+inline auto format_as(const MarkInCompressedFile & mark)
+{
+    return mark.toString();
+}
+
 using MarksInCompressedFile = PODArray<MarkInCompressedFile>;
 using MarksInCompressedFilePtr = std::shared_ptr<MarksInCompressedFile>;
 } // namespace DB

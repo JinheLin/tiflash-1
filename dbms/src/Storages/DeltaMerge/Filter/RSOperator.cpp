@@ -99,4 +99,35 @@ RSOperatorPtr wrapWithANNQueryInfo(const RSOperatorPtr & op, const ANNQueryInfoP
     return std::make_shared<WithANNQueryInfo>(op, ann_query_info);
 }
 
+RSOperatorPtr RSOperator::buildForInvertedIndex(
+    const google::protobuf::RepeatedPtrField<tipb::Expr> & filter_exprs,
+    const TimezoneInfo & timezone_info,
+    const TiDB::ColumnInfos & scan_column_infos,
+    const ColumnDefines & table_column_defines,
+    const LoggerPtr & tracing_logger)
+{
+    RUNTIME_CHECK(!filter_exprs.empty());
+    auto create_attr_by_column_id = [&table_column_defines](ColumnID original_col_id) -> Attr {
+        auto iter = std::find_if(
+            table_column_defines.begin(),
+            table_column_defines.end(),
+            [original_col_id](const ColumnDefine & d) -> bool { return d.id == original_col_id; });
+        auto target_col_id = getInvertedIndexColumnID(original_col_id);
+        if (iter != table_column_defines.end())
+            return Attr{.col_name = iter->name, .col_id = target_col_id, .type = iter->type};
+        // Maybe throw an exception? Or check if `type` is nullptr before creating filter?
+        return Attr{.col_name = "", .col_id = target_col_id, .type = DataTypePtr{}};
+    };
+    auto rs_operator = FilterParser::parseFilterExprs(
+        filter_exprs,
+        timezone_info,
+        scan_column_infos,
+        std::move(create_attr_by_column_id),
+        tracing_logger);
+    if (likely(rs_operator != DM::EMPTY_RS_OPERATOR))
+        LOG_DEBUG(tracing_logger, "Rough set filter: {}", rs_operator->toDebugString());
+
+    return rs_operator;
+}
+
 } // namespace DB::DM

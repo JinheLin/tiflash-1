@@ -3405,6 +3405,95 @@ BlockInputStreamPtr Segment::getLateMaterializationStream(
         dm_context.tracing_id);
 }
 
+
+BitmapFilterPtr Segment::buildLMBitmapByInvertedIndex(
+    const DMContext & dm_context,
+    const ColumnDefines & columns_to_read,
+    const SegmentSnapshotPtr & segment_snap,
+    const RowKeyRanges & data_ranges,
+    const PushDownFilterPtr & filter,
+    UInt64 start_ts,
+    size_t expected_block_size)
+{
+    // TODO: Check if inverted index built?
+    RUNTIME_CHECK(segment_snap->delta->getRows() == 0 && segment_snap->delta->getDeletes() == 0);
+    // set `is_fast_scan` to true to try to enable clean read
+    auto enable_handle_clean_read = !hasColumn(columns_to_read, EXTRA_HANDLE_COLUMN_ID);
+    constexpr auto is_fast_scan = true;
+    auto enable_del_clean_read = !hasColumn(columns_to_read, TAG_COLUMN_ID);
+
+    auto col_ids = filter->rs_operator_for_inverted_index->getColumnIDs();
+    auto last = std::unique(col_ids.begin(), col_ids.end());
+    RUNTIME_CHECK(last - col_ids.begin() == 1, col_ids);
+
+    const auto & dmfiles = segment_snap->stable->stable->getDMFiles();
+    RUNTIME_CHECK(dmfiles.size() == 1);
+    const auto & dmfile = *(dmfiles.front());
+    auto fnames = dmfile.getInvertedFileNames(col_ids.front());
+    RUNTIME_CHECK(
+        std::all_of(
+            fnames.cbegin(),
+            fnames.cend(),
+            [&dmfile](const String & fname) { return std::filesystem::exists(dmfile.subFilePath(fname)); }),
+        dmfile.path(),
+        col_ids.front());
+
+    const auto & read_columns_for_inverted_index = filter->read_columns_for_inverted_index;
+    BlockInputStreamPtr inverted_columns_stable_stream = segment_snap->stable->getInputStream(
+        dm_context,
+        read_columns_for_inverted_index,
+        data_ranges,
+        filter->rs_operator_for_inverted_index,
+        start_ts,
+        expected_block_size,
+        enable_handle_clean_read,
+        ReadTag::LMFilter,
+        is_fast_scan,
+        enable_del_clean_read);
+
+    inverted_columns_stable_stream = std::make_shared<ExpressionBlockInputStream>(
+        inverted_columns_stable_stream,
+        filter->cp_index_to_origin,
+        dm_context.tracing_id);
+    inverted_columns_stable_stream->setExtraInfo("copy index to origin");
+
+    if (filter->extra_cast)
+    {
+        inverted_columns_stable_stream = std::make_shared<ExpressionBlockInputStream>(
+            inverted_columns_stable_stream,
+            filter->extra_cast,
+            dm_context.tracing_id);
+        inverted_columns_stable_stream->setExtraInfo("cast after tableScan");
+    }
+    inverted_columns_stable_stream = std::make_shared<FilterBlockInputStream>(
+        inverted_columns_stable_stream,
+        filter->before_where,
+        filter->filter_column_name,
+        dm_context.tracing_id);
+    inverted_columns_stable_stream->setExtraInfo("push down filter");
+    //inverted_columns_stable_stream = std::make_shared<ExpressionBlockInputStream>(
+    //inverted_columns_stable_stream,
+    //filter->project_after_where,
+    //dm_context.tracing_id);
+    //inverted_columns_stable_stream->setExtraInfo("project after where");
+
+    auto rows = segment_snap->stable->getRows();
+    auto bitmap_filter = std::make_shared<BitmapFilter>(rows, false);
+    while (true)
+    {
+        FilterPtr filter = nullptr;
+        auto block = inverted_columns_stable_stream->read(filter, true);
+        if (!block)
+            break;
+        const auto & col_type_name = block.getByName(read_columns_for_inverted_index[1].name);
+        const auto & col = col_type_name.column;
+        const auto * v = toColumnVectorDataPtr<UInt32>(col);
+        assert(v != nullptr);
+        bitmap_filter->set(std::span{v->data(), v->size()}, filter);
+    }
+    return bitmap_filter;
+}
+
 RowKeyRanges Segment::shrinkRowKeyRanges(const RowKeyRanges & read_ranges) const
 {
     RowKeyRanges real_ranges;
@@ -3452,7 +3541,19 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
         segment_snap->stable->clearColumnCaches();
     }
 
-    if (filter && filter->before_where)
+    if (filter && filter->rs_operator_for_inverted_index)
+    {
+        auto bitmap_filter_of_inverted_index = buildLMBitmapByInvertedIndex(
+            dm_context,
+            columns_to_read,
+            segment_snap,
+            real_ranges,
+            filter,
+            start_ts,
+            read_data_block_rows);
+        bitmap_filter->logicalAnd(std::move(*bitmap_filter_of_inverted_index));
+    }
+    else if (filter && filter->before_where)
     {
         // if has filter conditions pushed down, use late materialization
         return getLateMaterializationStream(
@@ -3510,6 +3611,12 @@ size_t Segment::clipBlockRows(
             pack_rows); // Align down with pack rows and at least read one pack.
         return std::min(expected_block_rows, rows);
     }
+}
+
+void Segment::buildDMFileInvertedIndex(const DMContext & dm_context, ColId col_id)
+{
+    auto segment_snapshot = createSnapshot(dm_context, false, CurrentMetrics::DT_SnapshotOfRead);
+    segment_snapshot->stable->stable->buildDMFileInvertedIndex(dm_context.global_context, col_id);
 }
 
 } // namespace DM

@@ -51,9 +51,10 @@ public:
             const DataTypePtr & type,
             CompressionSettings compression_settings,
             size_t max_compress_block_size,
-            FileProviderPtr & file_provider,
+            const FileProviderPtr & file_provider,
             const WriteLimiterPtr & write_limiter_,
-            bool do_index)
+            bool do_index,
+            bool for_inverted_index)
             : plain_file(ChecksumWriteBufferBuilder::build(
                 dmfile->getConfiguration().has_value(),
                 file_provider,
@@ -78,7 +79,7 @@ public:
                 CompressionSettings(setting),
                 !dmfile->getConfiguration());
 
-            if (!dmfile->useMetaV2())
+            if (!dmfile->useMetaV2() || for_inverted_index)
             {
                 // will not used in DMFileFormat::V3, could be removed when v3 is default
                 mark_file = ChecksumWriteBufferBuilder::build(
@@ -152,6 +153,21 @@ public:
 
     DMFilePtr getFile() const { return dmfile; }
 
+    /// Add streams with specified column id. Since a single column may have more than one Stream,
+    /// for example Nullable column has a NullMap column, we would track them with a mapping
+    /// FileNameBase -> Stream.
+    static void addStreams(
+        ColId col_id,
+        DataTypePtr type,
+        bool do_index,
+        const DMFilePtr & dmfile,
+        const CompressionSettings & compression_settings,
+        size_t max_compress_block_size,
+        const FileProviderPtr & file_provider,
+        const WriteLimiterPtr & write_limiter,
+        bool for_inverted_index,
+        ColumnStreams & column_streams);
+
 private:
     void finalizeColumn(ColId col_id, DataTypePtr type);
     void writeColumn(
@@ -159,11 +175,6 @@ private:
         const IDataType & type,
         const IColumn & column,
         const ColumnVector<UInt8> * del_mark);
-
-    /// Add streams with specified column id. Since a single column may have more than one Stream,
-    /// for example Nullable column has a NullMap column, we would track them with a mapping
-    /// FileNameBase -> Stream.
-    void addStreams(ColId col_id, DataTypePtr type, bool do_index);
 
     WriteBufferFromFileBasePtr createMetaFile();
     void finalizeMeta();

@@ -645,6 +645,7 @@ public:
             local_indexed_build_error.erase(id);
         }
     }
+    void buildDMFileInvertedIndex(const DMContext & dm_context, ColId col_id);
 
 #ifndef DBMS_PUBLIC_GTEST
 private:
@@ -755,6 +756,15 @@ public:
 
     BlockInputStreamPtr getLateMaterializationStream(
         BitmapFilterPtr && bitmap_filter,
+        const DMContext & dm_context,
+        const ColumnDefines & columns_to_read,
+        const SegmentSnapshotPtr & segment_snap,
+        const RowKeyRanges & data_ranges,
+        const PushDownFilterPtr & filter,
+        UInt64 start_ts,
+        size_t expected_block_size);
+
+    BitmapFilterPtr buildLMBitmapByInvertedIndex(
         const DMContext & dm_context,
         const ColumnDefines & columns_to_read,
         const SegmentSnapshotPtr & segment_snap,

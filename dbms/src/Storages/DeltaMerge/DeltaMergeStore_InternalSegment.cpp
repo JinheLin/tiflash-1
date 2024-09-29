@@ -877,6 +877,18 @@ SegmentPtr DeltaMergeStore::segmentMergeDelta(
             segment_snap
                 = segment->createSnapshot(dm_context, /* for_update */ true, CurrentMetrics::DT_SnapshotOfDeltaMerge);
 
+        if (segment_snap->delta->getRows() == 0 && segment_snap->delta->getDeletes() == 0)
+        {
+            LOG_INFO(log, "No delta. segment={}", segment->simpleInfo());
+            return segment;
+        }
+        LOG_INFO(
+            log,
+            "segment={}, delta rows={}, delta deletes={}",
+            segment->simpleInfo(),
+            segment_snap->delta->getRows(),
+            segment_snap->delta->getDeletes());
+
         if (unlikely(!segment_snap))
         {
             LOG_DEBUG(

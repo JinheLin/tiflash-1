@@ -171,12 +171,15 @@ void DMFilePackFilter::loadIndex(
     const auto & type = dmfile->getColumnStat(col_id).type;
     const auto file_name_base = DMFile::getFileNameBase(col_id);
 
+    const bool filter_by_inverted = col_id > INVERTED_INDEX_COLUMN_ID_OFFSET;
+
     auto load = [&]() {
-        auto index_file_size = dmfile->colIndexSize(col_id);
+        auto index_file_size
+            = filter_by_inverted ? dmfile->colIndexSizeByName(file_name_base) : dmfile->colIndexSize(col_id);
         if (index_file_size == 0)
             return std::make_shared<MinMaxIndex>(*type);
         auto index_guard = S3::S3RandomAccessFile::setReadFileInfo({
-            .size = dmfile->getReadFileSize(col_id, colIndexFileName(file_name_base)),
+            .size = dmfile->getReadFileSize(col_id, colIndexFileName(file_name_base)), // FIXME: filter_by_inverted
             .scan_context = scan_context,
         });
         if (!dmfile->getConfiguration()) // v1
@@ -189,7 +192,7 @@ void DMFilePackFilter::loadIndex(
                 read_limiter);
             return MinMaxIndex::read(*type, index_buf, index_file_size);
         }
-        else if (dmfile->useMetaV2()) // v3
+        else if (dmfile->useMetaV2() && !filter_by_inverted) // v3
         {
             const auto * dmfile_meta = typeid_cast<const DMFileMetaV2 *>(dmfile->meta.get());
             assert(dmfile_meta != nullptr);

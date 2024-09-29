@@ -774,6 +774,8 @@ void initThreadPool(Poco::Util::LayeredConfiguration & config)
         /*max_free_threads*/ default_num_threads,
         /*queue_size*/ default_num_threads * 8);
 
+    BuildInvertedIndexPool::initialize(16, 16, 10000);
+
     auto disaggregated_mode = getDisaggregatedMode(config);
     if (disaggregated_mode == DisaggregatedMode::Compute)
     {

@@ -46,7 +46,9 @@ struct BuildReadTaskForWNTableTrait
 struct BuildReadTaskTrait
 {
 };
-
+struct BuildInvertedIndexTrait
+{
+};
 // FutureContainer will wait for all futures finished automatically.
 class FutureContainer
 {
@@ -111,4 +113,6 @@ using WNEstablishDisaggTaskPool = IOThreadPool<IOPoolHelper::WNEstablishDisaggTa
 using BuildReadTaskForWNPool = IOThreadPool<IOPoolHelper::BuildReadTaskForWNTrait>;
 using BuildReadTaskForWNTablePool = IOThreadPool<IOPoolHelper::BuildReadTaskForWNTableTrait>;
 using BuildReadTaskPool = IOThreadPool<IOPoolHelper::BuildReadTaskTrait>;
+
+using BuildInvertedIndexPool = IOThreadPool<IOPoolHelper::BuildInvertedIndexTrait>; // Just for test/PoC
 } // namespace DB

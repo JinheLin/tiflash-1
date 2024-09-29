@@ -117,6 +117,8 @@ public:
 
     String toString() const;
 
+    size_t read_rows = 0;
+
 private:
     std::vector<Remote::PageOID> buildRemotePageOID() const;
 

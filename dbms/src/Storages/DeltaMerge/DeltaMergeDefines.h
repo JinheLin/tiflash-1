@@ -120,6 +120,51 @@ inline static const UInt64 INITIAL_EPOCH = 0;
 #define TAG_COLUMN_TYPE ::DB::MutableSupport::delmark_column_type
 #define EXTRA_TABLE_ID_COLUMN_TYPE ::DB::MutableSupport::extra_table_id_column_type
 
+static_assert(sizeof(ColId) == sizeof(Int64));
+
+constexpr Int64 INVERTED_INDEX_COLUMN_ID_OFFSET = 1000000;
+constexpr Int64 INVERTED_ROWID_COLUMN_ID_OFFSET = 2000000;
+
+inline ColId getInvertedIndexColumnID(ColId original_col_id)
+{
+    RUNTIME_CHECK(original_col_id < INVERTED_INDEX_COLUMN_ID_OFFSET);
+    return original_col_id + INVERTED_INDEX_COLUMN_ID_OFFSET;
+}
+
+inline ColId getInvertedRowIDColumnID(ColId original_col_id)
+{
+    RUNTIME_CHECK(original_col_id < INVERTED_INDEX_COLUMN_ID_OFFSET);
+    return original_col_id + INVERTED_ROWID_COLUMN_ID_OFFSET;
+}
+
+inline DataTypePtr getInvertedRowIDDataType()
+{
+    return DataTypeFactory::instance().get("UInt32");
+}
+
+inline String getInvertedRowIDColumnName(ColId original_col_id)
+{
+    return fmt::format("c_{}", getInvertedIndexColumnID(original_col_id));
+}
+
+inline ColumnDefine getInvertedIndexColumnDefine(ColId original_col_id, DataTypePtr type)
+{
+    return ColumnDefine{
+        getInvertedIndexColumnID(original_col_id),
+        fmt::format("c_{}", getInvertedIndexColumnID(original_col_id)),
+        type,
+    };
+}
+
+inline ColumnDefine getInvertedRowIDColumnDefine(ColId original_col_id)
+{
+    return ColumnDefine{
+        getInvertedRowIDColumnID(original_col_id),
+        fmt::format("c_{}", getInvertedRowIDColumnID(original_col_id)),
+        getInvertedRowIDDataType(),
+    };
+}
+
 inline const ColumnDefine & getExtraIntHandleColumnDefine()
 {
     static ColumnDefine EXTRA_HANDLE_COLUMN_DEFINE_{
@@ -184,9 +229,11 @@ using Attrs = std::vector<Attr>;
 template <>
 struct fmt::formatter<DB::DM::ColumnDefine>
 {
+    static constexpr auto parse(format_parse_context & ctx) { return ctx.begin(); }
+
     template <typename FormatContext>
     auto format(const DB::DM::ColumnDefine & cd, FormatContext & ctx) const -> decltype(ctx.out())
     {
-        return fmt::format_to(ctx.out(), "{}/{}", cd.id, cd.type->getName());
+        return fmt::format_to(ctx.out(), "{}/{}/{}", cd.id, cd.name, cd.type->getName());
     }
 };

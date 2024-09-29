@@ -44,6 +44,7 @@
 #endif
 #include <Common/StringUtils/StringUtils.h>
 #include <Server/DTTool/DTTool.h>
+#include <Storages/DeltaMerge/File/tools/MainEntry.h>
 
 /// Universal executable for various clickhouse applications
 #if ENABLE_TIFLASH_SERVER
@@ -117,6 +118,7 @@ std::pair<const char *, MainFunc> clickhouse_applications[] = {
 #if ENABLE_TIFLASH_CHECKPOINTTOOL
     {"pagecheckpoint", DB::PS::CheckpointTool::mainEntry},
 #endif
+    {"dmfile", DB::DM::DMFileTools::mainEntry},
     {"version", mainEntryVersion},
     {"errgen", mainExportError}};
 
@@ -127,7 +129,7 @@ int printHelp(int, char **)
     for (auto & application : clickhouse_applications)
         std::cerr << "tiflash " << application.first << " [args] " << std::endl;
     return -1;
-};
+}
 
 
 bool isClickhouseApp(const std::string & app_suffix, std::vector<char *> & argv)
