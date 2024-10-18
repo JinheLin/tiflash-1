@@ -764,7 +764,7 @@ public:
         UInt64 start_ts,
         size_t expected_block_size);
 
-    BitmapFilterPtr buildLMBitmapByInvertedIndex(
+    std::pair<BitmapFilterPtr, ColId> buildLMBitmapByInvertedIndex(
         const DMContext & dm_context,
         const ColumnDefines & columns_to_read,
         const SegmentSnapshotPtr & segment_snap,

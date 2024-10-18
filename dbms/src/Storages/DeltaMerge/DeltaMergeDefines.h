@@ -131,6 +131,12 @@ inline ColId getInvertedIndexColumnID(ColId original_col_id)
     return original_col_id + INVERTED_INDEX_COLUMN_ID_OFFSET;
 }
 
+inline ColId getOriginalColumnIDByInvertedIndexColumnID(ColId inverted_index_col_id)
+{
+    RUNTIME_CHECK(inverted_index_col_id > INVERTED_INDEX_COLUMN_ID_OFFSET && inverted_index_col_id < INVERTED_ROWID_COLUMN_ID_OFFSET, inverted_index_col_id);
+    return inverted_index_col_id - INVERTED_INDEX_COLUMN_ID_OFFSET;
+}
+
 inline ColId getInvertedRowIDColumnID(ColId original_col_id)
 {
     RUNTIME_CHECK(original_col_id < INVERTED_INDEX_COLUMN_ID_OFFSET);

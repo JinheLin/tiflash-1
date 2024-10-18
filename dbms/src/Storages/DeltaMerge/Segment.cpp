@@ -3406,7 +3406,7 @@ BlockInputStreamPtr Segment::getLateMaterializationStream(
 }
 
 
-BitmapFilterPtr Segment::buildLMBitmapByInvertedIndex(
+std::pair<BitmapFilterPtr, ColId> Segment::buildLMBitmapByInvertedIndex(
     const DMContext & dm_context,
     const ColumnDefines & columns_to_read,
     const SegmentSnapshotPtr & segment_snap,
@@ -3429,13 +3429,15 @@ BitmapFilterPtr Segment::buildLMBitmapByInvertedIndex(
     const auto & dmfiles = segment_snap->stable->stable->getDMFiles();
     RUNTIME_CHECK(dmfiles.size() == 1);
     const auto & dmfile = *(dmfiles.front());
-    auto fnames = dmfile.getInvertedFileNames(col_ids.front());
+    auto original_col_id = getOriginalColumnIDByInvertedIndexColumnID(col_ids.front());
+    auto fnames = dmfile.getInvertedFileNames(original_col_id);
     RUNTIME_CHECK(
         std::all_of(
             fnames.cbegin(),
             fnames.cend(),
             [&dmfile](const String & fname) { return std::filesystem::exists(dmfile.subFilePath(fname)); }),
         dmfile.path(),
+        original_col_id,
         col_ids.front());
 
     const auto & read_columns_for_inverted_index = filter->read_columns_for_inverted_index;
@@ -3491,7 +3493,7 @@ BitmapFilterPtr Segment::buildLMBitmapByInvertedIndex(
         assert(v != nullptr);
         bitmap_filter->set(std::span{v->data(), v->size()}, filter);
     }
-    return bitmap_filter;
+    return {bitmap_filter, col_ids.front()};
 }
 
 RowKeyRanges Segment::shrinkRowKeyRanges(const RowKeyRanges & read_ranges) const
@@ -3541,9 +3543,10 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
         segment_snap->stable->clearColumnCaches();
     }
 
+    auto local_columns_to_read = columns_to_read;
     if (filter && filter->rs_operator_for_inverted_index)
     {
-        auto bitmap_filter_of_inverted_index = buildLMBitmapByInvertedIndex(
+        auto [bitmap_filter_of_inverted_index, inverted_col_id] = buildLMBitmapByInvertedIndex(
             dm_context,
             columns_to_read,
             segment_snap,
@@ -3552,6 +3555,15 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
             start_ts,
             read_data_block_rows);
         bitmap_filter->logicalAnd(std::move(*bitmap_filter_of_inverted_index));
+
+        auto col_id = getOriginalColumnIDByInvertedIndexColumnID(inverted_col_id);
+        local_columns_to_read.erase(
+            std::remove_if(
+                local_columns_to_read.begin(),
+                local_columns_to_read.end(),
+                [col_id](const ColumnDefine & c) { return c.id == col_id; }),
+            local_columns_to_read.end());
+        LOG_DEBUG(segment_snap->log, "remove: {}, local_columns_to_read: {}", col_id, local_columns_to_read);
     }
     else if (filter && filter->before_where)
     {
