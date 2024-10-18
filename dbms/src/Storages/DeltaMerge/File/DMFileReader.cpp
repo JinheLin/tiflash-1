@@ -79,7 +79,6 @@ DMFileReader::DMFileReader(
     , file_provider(file_provider_)
     , log(Logger::get(tracing_id_))
 {
-    LOG_DEBUG(log, "{}", read_columns);
     for (const auto & cd : read_columns)
     {
         // New inserted column, will be filled with default value later
@@ -89,7 +88,6 @@ DMFileReader::DMFileReader(
         // Load stream for existing columns according to DataType in disk
         auto callback = [&](const IDataType::SubstreamPath & substream) {
             const auto stream_name = DMFile::getFileNameBase(cd.id, substream);
-            LOG_DEBUG(log, "{}", stream_name);
             auto stream = std::make_unique<ColumnReadStream>( //
                 *this,
                 cd.id,
@@ -100,7 +98,6 @@ DMFileReader::DMFileReader(
             column_streams.emplace(stream_name, std::move(stream));
         };
         const auto data_type = dmfile->getColumnStat(cd.id).type;
-        LOG_INFO(log, "col_id={}, type={}", cd.id, data_type->getName());
         data_type->enumerateStreams(callback, {});
     }
     if (max_sharing_column_bytes > 0)

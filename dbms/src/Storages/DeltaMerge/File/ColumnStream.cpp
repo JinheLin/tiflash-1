@@ -36,27 +36,21 @@ public:
             .scan_context = reader.scan_context,
         });
 
-        MarksInCompressedFilePtr mark_file;
         if (likely(reader.dmfile->useMetaV2() && reader.dmfile->isMerged(colMarkFileName(file_name_base))))
         {
             // the col_mark is merged into metav2
-            LOG_DEBUG(Logger::get(), "{} loadColMarkFromMetav2To", colMarkFileName(file_name_base));
-            mark_file = loadColMarkFromMetav2To(res, size);
+            return loadColMarkFromMetav2To(res, size);
         }
         else if (unlikely(!reader.dmfile->getConfiguration()))
         {
             // without checksum, simply load the raw bytes from file
-            LOG_DEBUG(Logger::get(), "{} loadRawColMarkTo", colMarkFileName(file_name_base));
-            mark_file = loadRawColMarkTo(res, size);
+            return loadRawColMarkTo(res, size);
         }
         else
         {
             // checksum is enabled but not merged into meta v2
-            LOG_DEBUG(Logger::get(), "{} loadColMarkWithChecksumTo", colMarkFileName(file_name_base));
-            mark_file = loadColMarkWithChecksumTo(res, size);
+            return loadColMarkWithChecksumTo(res, size);
         }
-        LOG_DEBUG(Logger::get(), "{}:{}", colMarkFileName(file_name_base), *mark_file);
-        return mark_file;
     }
 
 public:
