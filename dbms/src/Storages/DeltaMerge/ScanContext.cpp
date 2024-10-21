@@ -108,6 +108,10 @@ String ScanContext::toJson() const
     json->set("dmfile_lm_read_time", fmt::format("{:.3f}ms", dmfile_lm_read_time_ns.load() / NS_TO_MS_SCALE));
     json->set("lm_filter_and_read_time", fmt::format("{:.3f}ms", lm_filter_and_read_time_ns.load() / NS_TO_MS_SCALE));
     json->set("inverted_index_read_time", fmt::format("{:.3f}ms", inverted_index_read_time_ns.load() / NS_TO_MS_SCALE));
+    json->set("build_inverted_index_stream_time", fmt::format("{:.3f}ms", build_inverted_index_stream_time_ns.load() / NS_TO_MS_SCALE));
+    json->set("build_inverted_index_bitmap_time", fmt::format("{:.3f}ms", build_inverted_index_bitmap_time_ns.load() / NS_TO_MS_SCALE));
+    json->set("set_inverted_index_bitmap_time", fmt::format("{:.3f}ms", set_inverted_index_bitmap_time_ns.load() / NS_TO_MS_SCALE));
+
     json->set("segment_read_time", fmt::format("{:.3f}ms", segment_read_time_ns.load() / NS_TO_MS_SCALE));
 
     json->set(

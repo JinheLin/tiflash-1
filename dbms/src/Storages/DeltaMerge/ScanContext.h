@@ -47,6 +47,10 @@ public:
 
     std::atomic<uint64_t> lm_filter_and_read_time_ns{0};
     std::atomic<uint64_t> inverted_index_read_time_ns{0};
+    std::atomic<uint64_t> build_inverted_index_stream_time_ns{0};
+    std::atomic<uint64_t> build_inverted_index_bitmap_time_ns{0};
+    std::atomic<uint64_t> set_inverted_index_bitmap_time_ns{0};
+
     std::atomic<uint64_t> segment_read_time_ns{0};
 
     std::atomic<uint64_t> total_rs_pack_filter_check_time_ns{0};
@@ -251,6 +255,10 @@ public:
         dmfile_lm_read_time_ns += other.dmfile_lm_read_time_ns;
         lm_filter_and_read_time_ns += other.lm_filter_and_read_time_ns;
         inverted_index_read_time_ns += other.inverted_index_read_time_ns;
+        build_inverted_index_stream_time_ns += other.build_inverted_index_stream_time_ns;
+        build_inverted_index_bitmap_time_ns += other.build_inverted_index_bitmap_time_ns;
+        set_inverted_index_bitmap_time_ns += other.set_inverted_index_bitmap_time_ns;
+
         segment_read_time_ns += other.segment_read_time_ns;
 
         total_local_region_num += other.total_local_region_num;

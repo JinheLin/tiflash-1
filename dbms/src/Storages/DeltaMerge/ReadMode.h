@@ -45,5 +45,6 @@ enum class ReadTag
     Query, // Read columns required by queries.
     MVCC, // Read columns to build MVCC bitmap.
     LMFilter, // Read columns required by late-materialization filter.
+    InvertedIndex,
 };
 } // namespace DB::DM

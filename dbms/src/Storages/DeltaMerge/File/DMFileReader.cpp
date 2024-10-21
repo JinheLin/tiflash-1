@@ -779,10 +779,12 @@ void DMFileReader::initAllMatchBlockInfo()
         }
         auto [pack_count, rows] = get_all_match_block(i);
         // Do not read block too small, it may hurts performance
-        if (rows >= rows_threshold_per_read / 2)
+        if (rows >= rows_threshold_per_read / 2 || pack_count >= 2)
             all_match_block_infos.emplace(i, pack_count);
         i += pack_count;
     }
+    if (!all_match_block_infos.empty())
+        LOG_INFO(log, "read_tag: {}, all_match_block_infos: {}", magic_enum::enum_name(read_tag), all_match_block_infos);
 }
 
 size_t DMFileReader::getReadPackLimit(size_t start_pack_id)

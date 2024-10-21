@@ -767,7 +767,6 @@ public:
 
     std::pair<BitmapFilterPtr, ColId> buildLMBitmapByInvertedIndex(
         const DMContext & dm_context,
-        const ColumnDefines & columns_to_read,
         const SegmentSnapshotPtr & segment_snap,
         const RowKeyRanges & data_ranges,
         const PushDownFilterPtr & filter,
