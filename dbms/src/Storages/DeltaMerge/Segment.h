@@ -756,6 +756,7 @@ public:
 
     BlockInputStreamPtr getLateMaterializationStream(
         BitmapFilterPtr && bitmap_filter,
+        BitmapFilterPtr && bitmap_filter_of_inverted_index,
         const DMContext & dm_context,
         const ColumnDefines & columns_to_read,
         const SegmentSnapshotPtr & segment_snap,

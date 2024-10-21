@@ -3269,6 +3269,7 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
 
 BlockInputStreamPtr Segment::getLateMaterializationStream(
     BitmapFilterPtr && bitmap_filter,
+    BitmapFilterPtr && bitmap_filter_of_inverted_index,
     const DMContext & dm_context,
     const ColumnDefines & columns_to_read,
     const SegmentSnapshotPtr & segment_snap,
@@ -3340,6 +3341,8 @@ BlockInputStreamPtr Segment::getLateMaterializationStream(
         segment_snap->stable->getDMFilesRows(),
         dm_context.tracing_id);
 
+    if (!bitmap_filter_of_inverted_index)
+    {
     // construct extra cast stream if needed
     if (filter->extra_cast)
     {
@@ -3357,6 +3360,7 @@ BlockInputStreamPtr Segment::getLateMaterializationStream(
         filter->filter_column_name,
         dm_context.tracing_id);
     filter_column_stream->setExtraInfo("push down filter");
+    }
 
     auto rest_columns_to_read = std::make_shared<ColumnDefines>(columns_to_read);
     // remove columns of pushed down filter
@@ -3402,6 +3406,7 @@ BlockInputStreamPtr Segment::getLateMaterializationStream(
         filter_column_stream,
         rest_column_stream,
         bitmap_filter,
+        bitmap_filter_of_inverted_index,
         dm_context.tracing_id);
 }
 
@@ -3543,10 +3548,12 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
         segment_snap->stable->clearColumnCaches();
     }
 
-    auto local_columns_to_read = columns_to_read;
+    auto rest_columns_to_read = columns_to_read;
+    BitmapFilterPtr bitmap_filter_of_inverted_index;
     if (filter && filter->rs_operator_for_inverted_index)
     {
-        auto [bitmap_filter_of_inverted_index, inverted_col_id] = buildLMBitmapByInvertedIndex(
+        ColId inverted_col_id;
+        std::tie(bitmap_filter_of_inverted_index, inverted_col_id) = buildLMBitmapByInvertedIndex(
             dm_context,
             columns_to_read,
             segment_snap,
@@ -3554,22 +3561,19 @@ BlockInputStreamPtr Segment::getBitmapFilterInputStream(
             filter,
             start_ts,
             read_data_block_rows);
-        bitmap_filter->logicalAnd(std::move(*bitmap_filter_of_inverted_index));
+        //bitmap_filter->logicalAnd(std::move(*bitmap_filter_of_inverted_index));
 
         auto col_id = getOriginalColumnIDByInvertedIndexColumnID(inverted_col_id);
-        local_columns_to_read.erase(
-            std::remove_if(
-                local_columns_to_read.begin(),
-                local_columns_to_read.end(),
-                [col_id](const ColumnDefine & c) { return c.id == col_id; }),
-            local_columns_to_read.end());
-        LOG_DEBUG(segment_snap->log, "remove: {}, local_columns_to_read: {}", col_id, local_columns_to_read);
+        std::erase_if(rest_columns_to_read, [col_id](const ColumnDefine & c) { return c.id == col_id; });
+        LOG_DEBUG(segment_snap->log, "remove: {}, local_columns_to_read: {}", col_id, rest_columns_to_read);
     }
-    else if (filter && filter->before_where)
+    
+    if (filter && filter->before_where)
     {
         // if has filter conditions pushed down, use late materialization
         return getLateMaterializationStream(
             std::move(bitmap_filter),
+            std::move(bitmap_filter_of_inverted_index),
             dm_context,
             columns_to_read,
             segment_snap,

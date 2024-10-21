@@ -39,6 +39,7 @@ public:
         BlockInputStreamPtr filter_column_stream_,
         SkippableBlockInputStreamPtr rest_column_stream_,
         const BitmapFilterPtr & bitmap_filter_,
+        const BitmapFilterPtr & bitmap_filter_of_inverted_index_,
         const String & req_id_);
 
     String getName() const override { return NAME; }
@@ -58,6 +59,11 @@ private:
     SkippableBlockInputStreamPtr rest_column_stream;
     // The MVCC-bitmap.
     BitmapFilterPtr bitmap_filter;
+
+    IColumn::Filter filter_of_inverted_index;
+    BitmapFilterPtr bitmap_filter_of_inverted_index;
+
+    Block readFilterColumn(DB::FilterPtr & f, bool r);
 
     const LoggerPtr log;
 };
