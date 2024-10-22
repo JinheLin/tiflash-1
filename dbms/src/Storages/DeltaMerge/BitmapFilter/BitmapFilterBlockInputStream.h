@@ -43,7 +43,16 @@ protected:
     Block read() override
     {
         FilterPtr filter_ignored;
-        return read(filter_ignored, false);
+        auto block = read(filter_ignored, false);
+        if (block && const_cd.type)
+        {
+            auto col = const_cd.type->createColumnConstWithDefaultValue(block.rows());
+            //col->insertRangeFrom(*(bitmap_filter->column), offset, block.rows());
+            block.insert(0, {col, const_cd.type, const_cd.name});
+            //offset += block.rows();
+            //return hstackBlocks({block}, header);
+        }
+        return block;
     }
 
     // When all rows in block are not filtered out, `res_filter` will be set to null.
@@ -64,6 +73,8 @@ private:
     BitmapFilterPtr bitmap_filter;
     const LoggerPtr log;
     IColumn::Filter filter;
+    ColumnDefine const_cd;
+    //size_t offset = 0;
 };
 
 } // namespace DB::DM

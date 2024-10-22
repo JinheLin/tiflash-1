@@ -33,7 +33,20 @@ BitmapFilterBlockInputStream::BitmapFilterBlockInputStream(
     , stable_rows(stable_rows_)
     , bitmap_filter(bitmap_filter_)
     , log(Logger::get(NAME, req_id_))
-{}
+{
+    if (bitmap_filter->const_column_id != 0)
+    {
+        for (size_t i = 0; i < columns_to_read.size(); ++i)
+        {
+            if (columns_to_read[i].id == bitmap_filter->const_column_id)
+            {
+                const_cd = columns_to_read[i];
+                break;
+            }
+        }
+        RUNTIME_CHECK(const_cd.type != nullptr, columns_to_read, bitmap_filter->const_column_id);
+    }
+}
 
 Block BitmapFilterBlockInputStream::read(FilterPtr & res_filter, bool return_filter)
 {

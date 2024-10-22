@@ -16,7 +16,7 @@
 
 #include <Columns/IColumn.h>
 #include <DataStreams/IBlockInputStream.h>
-
+#include <Storages/DeltaMerge/DeltaMergeDefines.h>
 #include <span>
 
 namespace DB::DM
@@ -50,6 +50,10 @@ public:
     inline size_t size() const { return filter.size(); }
 
     friend class BitmapFilterView;
+
+    ColId const_column_id = 0;
+
+    ColumnPtr column;
 
 private:
     std::vector<bool> filter;
