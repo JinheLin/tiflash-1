@@ -83,7 +83,7 @@ void writeColumn(
     const ColumnStreams & column_streams,
     const IDataType & type,
     const IColumn & column,
-    size_t min_compress_block_size,
+    [[maybe_unused]]size_t min_compress_block_size,
     ColId col_id)
 {
     type.enumerateStreams(
@@ -96,8 +96,7 @@ void writeColumn(
                 stream->minmaxes->addPack(column, nullptr);
 
             // Write Mark
-            if (stream->compressed_buf->offset() >= min_compress_block_size)
-                stream->compressed_buf->next();
+            stream->compressed_buf->next();
             auto offset_in_compressed_block = stream->compressed_buf->offset();
             writeIntBinary(stream->plain_file->count(), *stream->mark_file);
             writeIntBinary(offset_in_compressed_block, *stream->mark_file);
@@ -172,7 +171,7 @@ void writeColumn(
         return std::nullopt;
     }
 
-    constexpr auto force_build = false;
+    constexpr auto force_build = true;
 
     auto fnames = dmfile.getInvertedFileNames(col_id);
     if (!force_build && std::all_of(fnames.cbegin(), fnames.cend(), [&dmfile](const String & fname) {

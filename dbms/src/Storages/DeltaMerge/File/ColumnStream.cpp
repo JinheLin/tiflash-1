@@ -301,12 +301,13 @@ ColumnReadStream::ColumnReadStream(
         .scan_context = reader.scan_context,
     });
 
+    bool for_inverted_index = col_id > INVERTED_INDEX_COLUMN_ID_OFFSET;
     // load column data read buffer
-    if (likely(reader.dmfile->useMetaV2()))
+    if (likely(reader.dmfile->useMetaV2()) && !for_inverted_index)
     {
         buf = buildColDataReadBuffByMetaV2(reader, col_id, file_name_base, read_limiter);
     }
-    else if (unlikely(!reader.dmfile->getConfiguration())) // checksum not enabled
+    else if (unlikely(!reader.dmfile->getConfiguration()) || for_inverted_index) // checksum not enabled
     {
         buf = buildColDataReadBuffWithoutChecksum(
             reader,

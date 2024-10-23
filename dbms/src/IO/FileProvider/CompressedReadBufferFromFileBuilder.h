@@ -24,7 +24,7 @@ namespace DB
 class CompressedReadBufferFromFileBuilder
 {
 public:
-    static std::unique_ptr<LegacyCompressedReadBufferFromFile> buildLegacy(
+    static std::unique_ptr<CompressedReadBufferFromFile> buildLegacy(
         FileProviderPtr & file_provider,
         const std::string & path,
         const EncryptionPath & encryption_path,

@@ -20,7 +20,7 @@
 namespace DB
 {
 
-std::unique_ptr<LegacyCompressedReadBufferFromFile> CompressedReadBufferFromFileBuilder::buildLegacy(
+std::unique_ptr<CompressedReadBufferFromFile> CompressedReadBufferFromFileBuilder::buildLegacy(
     FileProviderPtr & file_provider,
     const std::string & path,
     const EncryptionPath & encryption_path,
@@ -34,7 +34,7 @@ std::unique_ptr<LegacyCompressedReadBufferFromFile> CompressedReadBufferFromFile
         buf_size,
         read_limiter_);
     // with legacy checksum in CompressedReadBuffer
-    return std::make_unique<CompressedReadBufferFromFileImpl<true>>(std::move(file_in));
+    return std::make_unique<CompressedReadBufferFromFileImpl<false>>(std::move(file_in));
 }
 
 std::unique_ptr<CompressedReadBufferFromFile> CompressedReadBufferFromFileBuilder::build(

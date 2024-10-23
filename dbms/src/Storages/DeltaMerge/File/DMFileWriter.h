@@ -56,7 +56,7 @@ public:
             bool do_index,
             bool for_inverted_index)
             : plain_file(ChecksumWriteBufferBuilder::build(
-                dmfile->getConfiguration().has_value(),
+                for_inverted_index ? false : dmfile->getConfiguration().has_value(),
                 file_provider,
                 dmfile->colDataPath(file_base_name),
                 dmfile->encryptionDataPath(file_base_name),
@@ -77,7 +77,7 @@ public:
             compressed_buf = CompressedWriteBuffer<>::build(
                 *plain_file,
                 CompressionSettings(setting),
-                !dmfile->getConfiguration());
+                for_inverted_index ? false : !dmfile->getConfiguration());
 
             if (!dmfile->useMetaV2() || for_inverted_index)
             {
