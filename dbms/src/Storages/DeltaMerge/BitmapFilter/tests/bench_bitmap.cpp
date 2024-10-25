@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Columns/ColumnVector.h>
 #include <Core/Defines.h>
 #include <benchmark/benchmark.h>
 
@@ -163,4 +164,20 @@ BENCHMARK(bitmapSetRangeBool);
 BENCHMARK(bitmapSetRangeUInt8);
 BENCHMARK(bitmapGetRangeBool);
 BENCHMARK(bitmapGetRangeUInt8);
+
+static void columnFilterAll(benchmark::State & state)
+{
+    auto column = ColumnVector<UInt64>::create();
+    column->insertMany(1UL, 65536);
+    IColumn::Filter f(65536, 1);
+    for (auto _ : state)
+    {
+        auto col = column->filter(f, 65536);
+        benchmark::DoNotOptimize(col);
+    }
+}
+
+BENCHMARK(columnFilterAll);
+
+
 } // namespace DB::bench

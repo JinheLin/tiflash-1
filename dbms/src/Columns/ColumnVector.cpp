@@ -246,33 +246,18 @@ void ColumnVector<T>::insertRangeFrom(const IColumn & src, size_t start, size_t 
 }
 
 template <typename T>
-ColumnPtr ColumnVector<T>::filter(const IColumn::Filter & filt, ssize_t result_size_hint) const
+std::tuple<const UInt8 *, const UInt8 *, const T *> ColumnVector<T>::filterSSE2(
+    const UInt8 * filt_pos,
+    const UInt8 * filt_end,
+    const T * data_pos,
+    const size_t size,
+    Container & res_data) const
 {
-    size_t size = data.size();
-    if (size != filt.size())
-        throw Exception("Size of filter doesn't match size of column.", ErrorCodes::SIZES_OF_COLUMNS_DOESNT_MATCH);
-
-    auto res = this->create();
-    Container & res_data = res->getData();
-
-    if (result_size_hint)
-    {
-        if (result_size_hint < 0)
-            result_size_hint = countBytesInFilter(filt);
-        res_data.reserve(result_size_hint);
-    }
-
-    const UInt8 * filt_pos = &filt[0];
-    const UInt8 * filt_end = filt_pos + size;
-    const T * data_pos = &data[0];
-
-#if __SSE2__
     /** A slightly more optimized version.
-        * Based on the assumption that often pieces of consecutive values
-        *  completely pass or do not pass the filter.
-        * Therefore, we will optimistically check the parts of `SIMD_BYTES` values.
-        */
-
+    * Based on the assumption that often pieces of consecutive values
+    *  completely pass or do not pass the filter.
+    * Therefore, we will optimistically check the parts of `SIMD_BYTES` values.
+    */
     static constexpr size_t SIMD_BYTES = 16;
     const __m128i zero16 = _mm_setzero_si128();
     const UInt8 * filt_end_sse = filt_pos + size / SIMD_BYTES * SIMD_BYTES;
@@ -300,8 +285,56 @@ ColumnPtr ColumnVector<T>::filter(const IColumn::Filter & filt, ssize_t result_s
         filt_pos += SIMD_BYTES;
         data_pos += SIMD_BYTES;
     }
-#endif
+    return {filt_pos, filt_end, data_pos};
+}
+template <typename T>
+std::tuple<const UInt8 *, const UInt8 *, const T *> ColumnVector<T>::filterAVX2(
+    const UInt8 * filt_pos,
+    const UInt8 * filt_end,
+    const T * data_pos,
+    const size_t size,
+    Container & res_data) const
+{
+    static constexpr size_t SIMD_BYTES = 32;
+    const __m256i zero256 = _mm256_setzero_si256();
+    const UInt8 * filt_end_avx = filt_pos + size / SIMD_BYTES * SIMD_BYTES;
 
+    while (filt_pos < filt_end_avx)
+    {
+        __m256i filter_chunk = _mm256_loadu_si256(reinterpret_cast<const __m256i *>(filt_pos));
+        __m256i mask = _mm256_cmpgt_epi8(filter_chunk, zero256);
+        int mask_int = _mm256_movemask_epi8(mask);
+
+        if (mask_int == 0)
+        {
+            // Nothing to insert
+        }
+        else if (static_cast<unsigned int>(mask_int) == 0xFFFFFFFF)
+        {
+            res_data.insert(data_pos, data_pos + SIMD_BYTES);
+        }
+        else
+        {
+            for (size_t i = 0; i < SIMD_BYTES; ++i)
+            {
+                if (filt_pos[i])
+                    res_data.push_back(data_pos[i]);
+            }
+        }
+
+        filt_pos += SIMD_BYTES;
+        data_pos += SIMD_BYTES;
+    }
+    return {filt_pos, filt_end, data_pos};
+}
+
+template <typename T>
+void ColumnVector<T>::filterOrdinary(
+    const UInt8 * filt_pos,
+    const UInt8 * filt_end,
+    const T * data_pos,
+    Container & res_data) const
+{
     while (filt_pos < filt_end)
     {
         if (*filt_pos)
@@ -310,7 +343,47 @@ ColumnPtr ColumnVector<T>::filter(const IColumn::Filter & filt, ssize_t result_s
         ++filt_pos;
         ++data_pos;
     }
+}
 
+template <typename T>
+std::tuple<const UInt8 *, const UInt8 *, const T *> ColumnVector<T>::prepareFilter(
+    const IColumn::Filter & filt,
+    ssize_t result_size_hint,
+    Container & res_data) const
+{
+    size_t size = data.size();
+    if (size != filt.size())
+        throw Exception("Size of filter doesn't match size of column.", ErrorCodes::SIZES_OF_COLUMNS_DOESNT_MATCH);
+
+    if (result_size_hint)
+    {
+        if (result_size_hint < 0)
+            result_size_hint = countBytesInFilter(filt);
+        res_data.reserve(result_size_hint);
+    }
+
+    const UInt8 * filt_pos = &filt[0];
+    const UInt8 * filt_end = filt_pos + size;
+    const T * data_pos = &data[0];
+
+    return {filt_pos, filt_end, data_pos};
+}
+
+template <typename T>
+ColumnPtr ColumnVector<T>::filter(const IColumn::Filter & filt, ssize_t result_size_hint) const
+{
+    auto res = this->create();
+    Container & res_data = res->getData();
+
+    auto [filt_pos, filt_end, data_pos] = prepareFilter(filt, result_size_hint, res_data);
+
+#if defined(__AVX2__)
+    std::tie(filt_pos, filt_end, data_pos) = filterAVX2(filt_pos, filt_end, data_pos, data.size(), res_data);
+#elif defined(__SSE2__)
+    std::tie(filt_pos, filt_end, data_pos) = filterSSE2(filt_pos, filt_end, data_pos, data.size(), res_data);
+#endif
+
+    filterOrdinary(filt_pos, filt_end, data_pos, res_data);
     return res;
 }
 

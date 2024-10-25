@@ -362,6 +362,27 @@ public:
 
     ColumnPtr filter(const IColumn::Filter & filt, ssize_t result_size_hint) const override;
 
+    std::tuple<const UInt8 *, const UInt8 *, const T *> prepareFilter(
+        const IColumn::Filter & filt,
+        ssize_t result_size_hint,
+        Container & res_data) const;
+
+    std::tuple<const UInt8 *, const UInt8 *, const T *> filterSSE2(
+        const UInt8 * filt_pos,
+        const UInt8 * filt_end,
+        const T * data_pos,
+        const size_t size,
+        Container & res_data) const;
+
+    std::tuple<const UInt8 *, const UInt8 *, const T *> filterAVX2(
+        const UInt8 * filt_pos,
+        const UInt8 * filt_end,
+        const T * data_pos,
+        const size_t size,
+        Container & res_data) const;
+
+    void filterOrdinary(const UInt8 * filt_pos, const UInt8 * filt_end, const T * data_pos, Container & res_data) const;
+
     ColumnPtr permute(const IColumn::Permutation & perm, size_t limit) const override;
 
     ColumnPtr replicateRange(size_t start_row, size_t end_row, const IColumn::Offsets & offsets) const override;
