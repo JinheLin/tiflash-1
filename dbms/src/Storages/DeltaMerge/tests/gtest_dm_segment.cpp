@@ -41,6 +41,7 @@
 #include <ctime>
 #include <future>
 #include <memory>
+#include <random>
 
 
 namespace CurrentMetrics
@@ -2077,5 +2078,83 @@ try
     ASSERT_EQ(1960, getRowsN());
 }
 CATCH
+
+TEST_F(SegmentTest, UpdateDeltaIndexWithConcurrentCompact)
+try
+{
+    auto write_to_cache = [&](size_t offset, size_t rows, UInt64 tso) {
+        auto block = DMTestEnv::prepareSimpleWriteBlock(offset, offset + rows, false, tso);
+        segment->writeToCache(dmContext(), block, 0, block.rows());
+    };
+
+    auto read_sorted_data = [&](SegmentPtr segment, SegmentSnapshotPtr snapshot = nullptr) {
+        constexpr bool is_common_handle = false;
+        const auto cd = getExtraHandleColumnDefine(is_common_handle);
+        const auto & dm_context = dmContext();
+        const auto & read_columns = *tableColumns();
+        const auto read_ranges = RowKeyRanges{RowKeyRange::newAll(is_common_handle, 1)};
+
+        BlockInputStreamPtr in;
+        if (!snapshot)
+            in = segment->getInputStreamModeNormal(dm_context, read_columns, read_ranges);
+        else
+            in = segment->getInputStreamModeNormal(dm_context, read_columns, snapshot, read_ranges, {}, std::numeric_limits<UInt64>::max(), DEFAULT_BLOCK_SIZE);
+
+        Blocks blocks;
+        while (true)
+        {
+            if (auto block = in->read(); block)
+                blocks.push_back(std::move(block));
+            else
+                break;
+        }
+        auto block = vstackBlocks(std::move(blocks));
+        auto sort_desc = getPkSort(cd);
+        ASSERT_TRUE(isAlreadySorted(block, sort_desc));
+    };
+
+    // Create stable
+    write_to_cache(0, 100, 1);
+    segment = segment->mergeDelta(dmContext(), tableColumns());
+
+    // Write data randomly
+    std::vector<Int64> handles{0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
+    std::iota(handles.begin(), handles.end(), 0);
+    std::random_device rd;
+    std::mt19937 g(rd());
+    while (std::is_sorted(handles.begin(), handles.end()))
+        std::shuffle(handles.begin(), handles.end(), g);
+    for (Int64 handle : handles) 
+        write_to_cache(handle, 1, 2);
+
+    read_sorted_data(segment);
+    ASSERT_EQ(segment->delta->getPlacedDeltaRows(), 10);
+    auto last_delta_index_epoch = segment->delta->getDeltaIndexEpoch();
+
+    auto sp_flush_prepared = SyncPointCtl::enableInScope("after_DeltaValueSpace::flush|prepare_flush");
+    auto th_flush = std::async([&]() { ASSERT_TRUE(segment->delta->flush(dmContext())); });
+    sp_flush_prepared.waitAndPause();
+
+    write_to_cache(1, 1, 2);
+    write_to_cache(21, 1, 2);
+    write_to_cache(11, 1, 2);
+
+    auto snap = segment->createSnapshot(dmContext(), false, CurrentMetrics::DT_SnapshotOfRead);
+    ASSERT_EQ(snap->delta->getRows(), 13);
+    
+    // Continue the flush
+    sp_flush_prepared.next();
+    th_flush.get();
+    ASSERT_EQ(segment->delta->getPlacedDeltaRows(), 10);
+    ASSERT_GT(segment->delta->getDeltaIndexEpoch(), last_delta_index_epoch);
+    last_delta_index_epoch = segment->delta->getDeltaIndexEpoch();
+
+    read_sorted_data(segment, snap);
+    ASSERT_EQ(segment->delta->getPlacedDeltaRows(), 13);
+    ASSERT_EQ(segment->delta->getDeltaIndexEpoch(), last_delta_index_epoch);
+
+}
+CATCH
+
 
 } // namespace DB::DM::tests
