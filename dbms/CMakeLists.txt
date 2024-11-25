@@ -401,12 +401,13 @@ if (ENABLE_TESTS)
         server_for_test
         delta_merge
         tiflash_aggregate_functions
-        kvstore)
+        kvstore
+        absl::btree)
 
     #if (NOT CMAKE_BUILD_TYPE_UC STREQUAL "DEBUG")
     #    target_link_libraries(bench_dbms tiflash_contrib::highfive)
     #endif()
-
+    target_compile_options(bench_dbms PUBLIC -Wno-unknown-pragmas -Wno-deprecated-copy -Wno-deprecated-builtins)
     add_check(bench_dbms)
 endif ()
 

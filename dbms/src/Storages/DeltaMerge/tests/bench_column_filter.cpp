@@ -15,7 +15,6 @@
 
 #include <Columns/ColumnVector.h>
 #include <benchmark/benchmark.h>
-
 #include <random>
 
 using namespace DB;
