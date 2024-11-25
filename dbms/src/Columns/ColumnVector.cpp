@@ -27,6 +27,7 @@
 #include <cstring>
 #include <ext/bit_cast.h>
 #include <ext/scope_guard.h>
+#include <span>
 
 #if __SSE2__
 #include <emmintrin.h>
@@ -580,6 +581,56 @@ ColumnPtr ColumnVector<T>::filter(const IColumn::Filter & filt, ssize_t result_s
 
         ++filt_pos;
         ++data_pos;
+    }
+
+    return res;
+}
+
+// Iterator which yields ranges of set and unset bits.
+// For example: 0011001001110
+// `next()` will return <2, 2>, <6, 1>, <9, 3>.
+class BitmapIterator
+{
+public:
+    explicit BitmapIterator(std::span<const UInt8> bitmap_)
+        : bitmap(bitmap_)
+        , pos(bitmap.begin()) {}
+    
+    // offset, count
+    std::optional<std::pair<size_t, size_t>> next()
+    {
+        const auto next_pos = std::find(pos, bitmap.end(), 1);
+        if (next_pos == bitmap.end())
+            return {};
+        pos = std::find(next_pos, bitmap.end(), 0);
+        return std::pair{next_pos - bitmap.begin(), pos - next_pos};
+    }
+private:
+    const std::span<const UInt8> bitmap;
+    std::span<const UInt8>::iterator pos;
+};
+
+template <typename T>
+ColumnPtr ColumnVector<T>::filterNew(const IColumn::Filter & filt, ssize_t result_size_hint) const
+{
+    size_t size = data.size();
+    if (size != filt.size())
+        throw Exception("Size of filter doesn't match size of column.", ErrorCodes::SIZES_OF_COLUMNS_DOESNT_MATCH);
+
+    auto res = this->create();
+    Container & res_data = res->getData();
+
+    if (result_size_hint)
+    {
+        if (result_size_hint < 0)
+            result_size_hint = countBytesInFilter(filt);
+        res_data.reserve(result_size_hint);
+    }
+
+    BitmapIterator bitmap_iter{std::span{&filt[0], size}};
+    for (auto r = bitmap_iter.next(); r; r = bitmap_iter.next())
+    {
+        res_data.insert(&data[r->first], &data[r->first] + r->second);
     }
 
     return res;

@@ -17,6 +17,8 @@
 #include <Storages/DeltaMerge/tests/DMTestEnv.h>
 #include <TestUtils/FunctionTestUtils.h>
 #include <TestUtils/InputStreamTestUtils.h>
+#include <random>
+
 
 namespace DB::DM::tests
 {
@@ -125,6 +127,56 @@ TEST(ColumnProjectionTest, NormalCase)
         Block({
             createColumn<String>({"hello", "world", "", "TiFlash", "Storage"}, str_col_name),
         }));
+}
+
+IColumn::Filter createRandomFilter(size_t n, size_t set_n)
+{
+    assert(n >= set_n);
+
+    IColumn::Filter filter(set_n, 1);
+    filter.resize_fill_zero(n, 0);
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(filter.begin(), filter.end(), g);
+    return filter;
+}
+
+TEST(ColumnVectorFilter, filter)
+{
+    constexpr size_t col_size = DEFAULT_BLOCK_SIZE;
+    auto col = ColumnVector<Int64>::create();
+    auto & v = col->getData();
+    v.resize(col_size);
+    std::iota(v.begin(), v.end(), 0);
+
+    std::vector<std::pair<size_t, size_t>> tests = {
+            {col_size, 0},
+        {col_size, col_size / 10},
+        {col_size, col_size / 9},
+        {col_size, col_size / 8},
+        {col_size, col_size / 7},
+        {col_size, col_size / 6},
+        {col_size, col_size / 5},
+        {col_size, col_size / 4},
+        {col_size, col_size / 3},
+        {col_size, col_size / 2},
+        {col_size, col_size / 1},
+    };
+
+    for (auto [n, set_n] : tests)
+    {
+        auto filter = createRandomFilter(n, set_n);
+        auto col1 = col->filter(filter, set_n * sizeof(Int64));
+        auto col2 = col->filterNew(filter, set_n * sizeof(Int64));
+
+        const auto * v1 = toColumnVectorDataPtr<Int64>(col1);
+        const auto * v2 = toColumnVectorDataPtr<Int64>(col2);
+
+        ASSERT_EQ(v1->size(), set_n);
+        ASSERT_EQ(v2->size(), set_n);
+        ASSERT_EQ(*v1, *v2);
+    }
 }
 
 } // namespace DB::DM::tests
