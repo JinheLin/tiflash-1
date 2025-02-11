@@ -140,10 +140,7 @@ protected:
         }
         auto handle_col1 = vstackBlocks(std::move(blks)).getByName(MutSup::extra_handle_column_name).column;
         auto handle_col2 = getSegmentHandle(task->segment->segmentId(), {task->segment->getRowKeyRange()});
-        ASSERT_TRUE(sequenceEqual(
-            toColumnVectorDataPtr<Int64>(handle_col2)->data(),
-            toColumnVectorDataPtr<Int64>(handle_col1)->data(),
-            handle_col1->size()));
+        ASSERT_TRUE(sequenceEqual(toColumnVectorData<Int64>(handle_col2), toColumnVectorData<Int64>(handle_col1)));
     }
 };
 
