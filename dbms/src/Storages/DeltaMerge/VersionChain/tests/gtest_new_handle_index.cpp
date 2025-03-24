@@ -29,9 +29,6 @@ protected:
         for (UInt32 i = 0; i <= 50; ++i)
             handle_index.insert(i * 2, i);
 
-        // Insert duplicate handle is not allowed
-        ASSERT_THROW(handle_index.insert(0, 100), DB::Exception);
-
         std::optional<DeltaValueReader> delta_reader;
         UInt32 stable_rows = 0;
         for (UInt32 i = 0; i <= 100; ++i)

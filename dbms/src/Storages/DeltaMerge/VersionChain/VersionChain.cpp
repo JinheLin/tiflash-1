@@ -108,7 +108,7 @@ std::shared_ptr<const std::vector<RowID>> VersionChain<HandleType>::replaySnapsh
         && dmfile_or_delete_range_list.size() == 1;
     SCOPE_EXIT({ cleanHandleColumn(); });
 
-    auto delta_reader = createDeltaValueReaderIfCommonHandle(dm_context, snapshot.delta);
+    auto delta_reader = createDeltaValueReader(dm_context, snapshot.delta);
 
     UInt32 curr_replayed_rows = 0;
     UInt32 curr_replayed_deletes = 0;
@@ -362,19 +362,16 @@ void VersionChain<HandleType>::cleanHandleColumn()
 }
 
 template <ExtraHandleType HandleType>
-std::optional<DeltaValueReader> VersionChain<HandleType>::createDeltaValueReaderIfCommonHandle(
+std::optional<DeltaValueReader> VersionChain<HandleType>::createDeltaValueReader(
     const DMContext & dm_context,
     const DeltaSnapshotPtr & delta_snap)
 {
-    if constexpr (std::is_same_v<HandleType, String>)
-        return DeltaValueReader{
-            dm_context,
-            delta_snap,
-            getHandleColumnDefinesPtr<HandleType>(),
-            /*range*/ {},
-            ReadTag::MVCC};
-    else
-        return std::nullopt;
+    return DeltaValueReader{
+        dm_context,
+        delta_snap,
+        getHandleColumnDefinesPtr<HandleType>(),
+        /*range*/ {},
+        ReadTag::MVCC};
 }
 
 template class VersionChain<Int64>;

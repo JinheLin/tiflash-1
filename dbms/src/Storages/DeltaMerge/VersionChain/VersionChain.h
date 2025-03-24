@@ -130,7 +130,7 @@ private:
         const UInt32 stable_rows,
         std::optional<DeltaValueReader> & delta_reader);
 
-    static std::optional<DeltaValueReader> createDeltaValueReaderIfCommonHandle(
+    static std::optional<DeltaValueReader> createDeltaValueReader(
         const DMContext & dm_context,
         const DeltaSnapshotPtr & delta_snap);
 
