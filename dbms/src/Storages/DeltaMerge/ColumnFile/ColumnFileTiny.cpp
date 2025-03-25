@@ -95,18 +95,21 @@ void ColumnFileTiny::serializeMetadata(dtpb::ColumnFilePersisted * cf_pb, bool s
     tiny_pb->set_rows(rows);
     tiny_pb->set_bytes(bytes);
 
-    if (!index_infos)
-        return;
-
-    for (const auto & index_info : *index_infos)
+    if (index_infos)
     {
-        // Just some integrity checks to ensure we are writing correct data.
-        // These data may come from deserialization, or generated in runtime.
-        details::integrityCheckIndexInfoV2(index_info);
+        for (const auto & index_info : *index_infos)
+        {
+            // Just some integrity checks to ensure we are writing correct data.
+            // These data may come from deserialization, or generated in runtime.
+            details::integrityCheckIndexInfoV2(index_info);
 
-        auto * index_pb = tiny_pb->add_indexes();
-        index_pb->CopyFrom(index_info);
+            auto * index_pb = tiny_pb->add_indexes();
+            index_pb->CopyFrom(index_info);
+        }
     }
+
+    if (stat)
+        tiny_pb->mutable_stat()->CopyFrom(*stat);
 }
 
 ColumnFilePersistedPtr ColumnFileTiny::deserializeMetadata(
@@ -181,6 +184,10 @@ ColumnFilePersistedPtr ColumnFileTiny::deserializeMetadata(
         index_infos->emplace_back(index_pb);
     }
 
+    std::optional<dtpb::ColumnFileStat> stat;
+    if (cf_pb.has_stat())
+        stat = cf_pb.stat();
+
     return std::make_shared<ColumnFileTiny>(
         schema,
         rows,
@@ -188,7 +195,8 @@ ColumnFilePersistedPtr ColumnFileTiny::deserializeMetadata(
         data_page_id,
         dm_context.keyspace_id,
         dm_context.global_context.getFileProvider(),
-        index_infos);
+        index_infos,
+        stat);
 }
 
 ColumnFilePersistedPtr ColumnFileTiny::restoreFromCheckpoint(

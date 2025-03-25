@@ -56,12 +56,20 @@ message ColumnFileIndexInfo {
     optional IndexFilePropsV2 index_props = 3;
 }
 
+message ColumnFileStat {
+    optional string min_handle = 1;
+    optional string max_handle = 2;
+    optional uint64 max_version = 3;
+    optional bool has_deleted = 4;
+}
+
 message ColumnFileTiny {
     repeated ColumnSchema columns = 1;
     required uint64 id = 2;
     required uint64 rows = 3;
     required uint64 bytes = 4;
     repeated ColumnFileIndexInfo indexes = 5;
+    optional ColumnFileStat stat = 6;
 }
 
 enum ColumnFileType {

@@ -65,6 +65,8 @@ private:
     /// The global file_provider
     const FileProviderPtr file_provider;
 
+    const std::optional<const dtpb::ColumnFileStat> stat;
+
 private:
     const DataTypePtr & getDataType(ColId column_id) const { return schema->getDataType(column_id); }
 
@@ -76,7 +78,8 @@ public:
         PageIdU64 data_page_id_,
         KeyspaceID keyspace_id_,
         const FileProviderPtr & file_provider_,
-        const IndexInfosPtr & index_infos_);
+        const IndexInfosPtr & index_infos_,
+        const std::optional<dtpb::ColumnFileStat> & stat_);
 
     Type getType() const override { return Type::TINY_FILE; }
 
@@ -102,6 +105,8 @@ public:
 
     ColumnFileSchemaPtr getSchema() const { return schema; }
 
+    const std::optional<dtpb::ColumnFileStat> & getStat() const { return stat; }
+
     ColumnFileTinyPtr cloneWith(PageIdU64 new_data_page_id)
     {
         return std::make_shared<ColumnFileTiny>(
@@ -111,7 +116,8 @@ public:
             new_data_page_id,
             keyspace_id,
             file_provider,
-            index_infos);
+            index_infos,
+            stat);
     }
 
     ColumnFileTinyPtr cloneWith(PageIdU64 new_data_page_id, const IndexInfosPtr & new_index_infos) const
@@ -123,7 +129,8 @@ public:
             new_data_page_id,
             keyspace_id,
             file_provider,
-            new_index_infos);
+            new_index_infos,
+            stat);
     }
 
     ColumnFileReaderPtr getReader(
