@@ -14,6 +14,7 @@
 
 #include <Common/SyncPoint/SyncPoint.h>
 #include <Common/TiFlashMetrics.h>
+#include <Interpreters/Context.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileInMemory.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileTiny.h>
 #include <Storages/DeltaMerge/DMContext.h>
@@ -75,7 +76,9 @@ bool ColumnFileFlushTask::commit(ColumnFilePersistedSetPtr & persisted_file_set,
                 m_file->getRows(),
                 m_file->getBytes(),
                 task.data_page,
-                context);
+                context.keyspace_id,
+                context.global_context.getFileProvider(),
+                /*index_infos*/ nullptr);
         }
         else if (auto * t_file = task.column_file->tryToTinyFile(); t_file)
         {

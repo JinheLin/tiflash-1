@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Interpreters/Context.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileBig.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileDeleteRange.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileSchema.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileTiny.h>
+#include <Storages/DeltaMerge/DMContext.h>
 
 namespace DB
 {
@@ -45,7 +47,14 @@ inline ColumnFilePersisteds transform_V2_to_V3(const DMContext & context, const 
         else
         {
             auto schema = getSharedBlockSchemas(context)->getOrCreate(*(f->schema));
-            f_v3 = std::make_shared<ColumnFileTiny>(schema, f->rows, f->bytes, f->data_page_id, context);
+            f_v3 = std::make_shared<ColumnFileTiny>(
+                schema,
+                f->rows,
+                f->bytes,
+                f->data_page_id,
+                context.keyspace_id,
+                context.global_context.getFileProvider(),
+                /*index_infos*/ nullptr);
         }
 
         column_files_v3.push_back(f_v3);

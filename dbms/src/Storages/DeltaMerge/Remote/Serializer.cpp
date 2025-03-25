@@ -392,7 +392,8 @@ ColumnFileTinyPtr Serializer::deserializeCFTiny(const DMContext & dm_context, co
         proto.rows(),
         proto.bytes(),
         proto.page_id(),
-        dm_context,
+        dm_context.keyspace_id,
+        dm_context.global_context.getFileProvider(),
         index_infos);
     cf->data_page_size = proto.page_size();
     return cf;

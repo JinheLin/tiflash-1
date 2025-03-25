@@ -74,14 +74,6 @@ public:
         UInt64 rows_,
         UInt64 bytes_,
         PageIdU64 data_page_id_,
-        const DMContext & dm_context,
-        const IndexInfosPtr & index_infos_ = nullptr);
-
-    ColumnFileTiny(
-        const ColumnFileSchemaPtr & schema_,
-        UInt64 rows_,
-        UInt64 bytes_,
-        PageIdU64 data_page_id_,
         KeyspaceID keyspace_id_,
         const FileProviderPtr & file_provider_,
         const IndexInfosPtr & index_infos_);

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Interpreters/Context.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileDataProvider.h>
 #include <Storages/DeltaMerge/Delta/DeltaValueSpace.h>
 #include <Storages/DeltaMerge/WriteBatchesImpl.h>
 #include <Storages/DeltaMerge/tests/gtest_segment_test_basic.h>
 #include <gtest/gtest.h>
-
 
 namespace DB::DM::tests
 {
@@ -51,7 +51,14 @@ TEST_F(ColumnFileCloneTest, CloneColumnFileTinyWithVectorIndex)
         vec_props->set_distance_metric(tipb::VectorDistanceMetric_Name(tipb::VectorDistanceMetric::L2));
         index_infos->emplace_back(std::move(index_info));
 
-        auto file = std::make_shared<ColumnFileTiny>(nullptr, 1, 10, data_page_id, *dm_context, index_infos);
+        auto file = std::make_shared<ColumnFileTiny>(
+            nullptr,
+            1,
+            10,
+            data_page_id,
+            dm_context->keyspace_id,
+            dm_context->global_context.getFileProvider(),
+            index_infos);
         persisted_files.emplace_back(std::move(file));
     }
     auto range = RowKeyRange::newAll(dm_context->is_common_handle, dm_context->rowkey_column_size);
