@@ -43,8 +43,7 @@ protected:
 
     void writeSegmentGeneric(
         std::string_view seg_data,
-        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range = std::nullopt,
-        const RowKeyRanges & read_ranges = {});
+        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range = std::nullopt);
 
     /*
     0----------------stable_rows----------------stable_rows + delta_rows <-- append
@@ -62,10 +61,7 @@ protected:
     Returns {row_id, handle}.
     */
     template <typename HandleType>
-    std::pair<const PaddedPODArray<UInt32> *, const std::optional<ColumnView<HandleType>>> writeSegment(
-        std::string_view seg_data,
-        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range,
-        const RowKeyRanges & read_ranges);
+    void writeSegment(std::string_view seg_data, std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range);
 
     void writeSegment(const SegDataUnit & unit);
 

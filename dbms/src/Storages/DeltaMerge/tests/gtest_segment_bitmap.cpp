@@ -36,21 +36,18 @@ void SegmentBitmapFilterTest::setRowKeyRange(Int64 begin, Int64 end, bool includ
 
 void SegmentBitmapFilterTest::writeSegmentGeneric(
     std::string_view seg_data,
-    std::optional<std::tuple<Int64, Int64, bool>> rowkey_range,
-    const RowKeyRanges & read_ranges)
+    std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range)
 {
     if (is_common_handle)
-        writeSegment<String>(seg_data, rowkey_range, read_ranges);
+        writeSegment<String>(seg_data, seg_rowkey_range);
     else
-        writeSegment<Int64>(seg_data, rowkey_range, read_ranges);
+        writeSegment<Int64>(seg_data, seg_rowkey_range);
 }
 
 template <typename HandleType>
-std::pair<const PaddedPODArray<UInt32> *, const std::optional<ColumnView<HandleType>>> SegmentBitmapFilterTest::
-    writeSegment(
-        std::string_view seg_data,
-        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range,
-        const RowKeyRanges & read_ranges)
+void SegmentBitmapFilterTest::writeSegment(
+    std::string_view seg_data,
+    std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range)
 {
     if (seg_rowkey_range)
     {
@@ -61,17 +58,6 @@ std::pair<const PaddedPODArray<UInt32> *, const std::optional<ColumnView<HandleT
     for (const auto & unit : seg_data_units)
     {
         writeSegment(unit);
-    }
-    hold_row_id = getSegmentRowId(SEG_ID, read_ranges);
-    hold_handle = getSegmentHandle(SEG_ID, read_ranges);
-    if (hold_row_id == nullptr)
-    {
-        RUNTIME_CHECK(hold_handle == nullptr);
-        return {nullptr, std::nullopt};
-    }
-    else
-    {
-        return {toColumnVectorDataPtr<UInt32>(hold_row_id), ColumnView<HandleType>(*hold_handle)};
     }
 }
 
@@ -147,22 +133,26 @@ template <typename HandleType>
 void SegmentBitmapFilterTest::runTestCase(TestCase test_case, int caller_line)
 {
     auto info = fmt::format("caller_line={}", caller_line);
-    auto [row_id, handle]
-        = writeSegment<HandleType>(test_case.seg_data, test_case.seg_rowkey_range, test_case.read_ranges);
+
+    writeSegment<HandleType>(test_case.seg_data, test_case.seg_rowkey_range);
+
+    // Verify row_id and handles by using DeltaIndex.
+    auto col_row_id = getSegmentRowId(SEG_ID, test_case.read_ranges);
+    auto col_handle = getSegmentHandle(SEG_ID, test_case.read_ranges);
     if (test_case.expected_size == 0)
     {
-        ASSERT_EQ(nullptr, row_id) << info;
-        ASSERT_EQ(std::nullopt, handle) << info;
+        ASSERT_EQ(nullptr, col_row_id) << info;
+        ASSERT_EQ(nullptr, col_handle) << info;
     }
     else
     {
-        ASSERT_EQ(test_case.expected_size, row_id->size()) << info;
         auto expected_row_id = genSequence<UInt32>(test_case.expected_row_id);
-        ASSERT_TRUE(sequenceEqual(expected_row_id, *row_id)) << info;
+        auto row_id = ColumnView<UInt32>(*col_row_id);
+        ASSERT_TRUE(sequenceEqual(expected_row_id, row_id)) << info;
 
-        ASSERT_EQ(test_case.expected_size, handle->size()) << info;
         auto expected_handle = genHandleSequence<HandleType>(test_case.expected_handle);
-        ASSERT_TRUE(sequenceEqual(expected_handle, *handle)) << info;
+        auto handle = ColumnView<HandleType>(*col_handle);
+        ASSERT_TRUE(sequenceEqual(expected_handle, handle)) << info;
     }
 
     verifyVersionChain(VerifyVersionChainOption{
