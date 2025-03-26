@@ -33,6 +33,8 @@ class ColumnFileDeleteRange;
 
 namespace tests
 {
+class SegmentBitmapFilterTest_NewHandleIndex_Test;
+class SegmentBitmapFilterTest_NewHandleIndex_CommonHandle_Test;
 class NewHandleIndexTest;
 } // namespace tests
 
@@ -135,6 +137,8 @@ private:
 
     static DeltaValueReader createDeltaValueReader(const DMContext & dm_context, const DeltaSnapshotPtr & delta_snap);
 
+    friend class tests::SegmentBitmapFilterTest_NewHandleIndex_Test;
+    friend class tests::SegmentBitmapFilterTest_NewHandleIndex_CommonHandle_Test;
     friend class tests::NewHandleIndexTest;
 
     std::mutex mtx;
@@ -161,5 +165,12 @@ inline GenericVersionChain createVersionChain(bool is_common_handle)
     else
         return GenericVersionChain{std::in_place_type<VersionChain<Int64>>};
 }
+
+enum class VersionChainMode : Int64
+{
+    Disabled = 0,
+    Enabled = 1,
+    EnabledForTest = 2,
+};
 
 } // namespace DB::DM

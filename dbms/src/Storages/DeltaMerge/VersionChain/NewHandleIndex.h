@@ -28,8 +28,10 @@ namespace DB::DM
 {
 namespace tests
 {
+class SegmentBitmapFilterTest_NewHandleIndex_Test;
+class SegmentBitmapFilterTest_NewHandleIndex_CommonHandle_Test;
 class NewHandleIndexTest;
-}
+} // namespace tests
 
 // NewHandleIndex maintains the **newly inserted** records in the delta: handle -> row_id.
 // In order to save memory, it stores the hash value of the handle instead of the handle itself.
@@ -131,6 +133,8 @@ private:
     Hash hasher;
     absl::btree_multimap<UInt32, RowID> handle_to_row_id;
 
+    friend class tests::SegmentBitmapFilterTest_NewHandleIndex_Test;
+    friend class tests::SegmentBitmapFilterTest_NewHandleIndex_CommonHandle_Test;
     friend class tests::NewHandleIndexTest;
 };
 
