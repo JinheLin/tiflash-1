@@ -44,21 +44,6 @@ void SegmentBitmapFilterTest::writeSegmentGeneric(
         writeSegment<Int64>(seg_data, rowkey_range);
 }
 
-/*
-    0----------------stable_rows----------------stable_rows + delta_rows <-- append
-    | stable value space | delta value space ..........................  <-- append
-    |--------------------|--ColumnFilePersisted--|ColumnFileInMemory...  <-- append
-    |--------------------|-Tiny|DeleteRange|Big--|ColumnFileInMemory...  <-- append
-
-    `seg_data`: s:[a, b)|d_tiny:[a, b)|d_tiny_del:[a, b)|d_big:[a, b)|d_dr:[a, b)|d_mem:[a, b)|d_mem_del
-    - s: stable
-    - d_tiny: delta ColumnFileTiny
-    - d_tiny_del: delta ColumnFileTiny with delete flag
-    - d_big: delta ColumnFileBig
-    - d_dr: delta delete range
-
-    Returns {row_id, handle}.
-    */
 template <typename HandleType>
 std::pair<const PaddedPODArray<UInt32> *, const std::optional<ColumnView<HandleType>>> SegmentBitmapFilterTest::
     writeSegment(std::string_view seg_data, std::optional<std::tuple<Int64, Int64, bool>> rowkey_range)
@@ -174,6 +159,12 @@ void SegmentBitmapFilterTest::runTestCase(TestCase test_case, int caller_line)
         auto expected_handle = genHandleSequence<HandleType>(test_case.expected_handle);
         ASSERT_TRUE(sequenceEqual(expected_handle, *handle)) << info;
     }
+
+    verifyVersionChain(VerifyVersionChainOption{
+        .seg_id = SEG_ID,
+        .caller_line = caller_line,
+        .expected_bitmap = test_case.expected_bitmap,
+    });
 }
 
 DMFilePackFilterResults SegmentBitmapFilterTest::loadPackFilterResults(
@@ -204,6 +195,46 @@ void SegmentBitmapFilterTest::checkHandle(PageIdU64 seg_id, std::string_view seq
         auto expected_handle = genHandleSequence<Int64>(seq_ranges);
         ASSERT_TRUE(sequenceEqual(expected_handle, ColumnView<Int64>{*handle})) << info;
     }
+}
+
+void SegmentBitmapFilterTest::verifyVersionChain(const VerifyVersionChainOption & opt)
+{
+    auto info = opt.toDebugString();
+    auto [seg, snap] = getSegmentForRead(opt.seg_id);
+
+    const auto read_ranges
+        = shrinkRowKeyRanges(seg->getRowKeyRange(), opt.read_ranges.value_or(RowKeyRanges{seg->getRowKeyRange()}));
+
+    const auto & rs_filter_results
+        = opt.rs_filter_results.empty() ? loadPackFilterResults(snap, read_ranges) : opt.rs_filter_results;
+
+    auto bitmap_filter_version_chain = seg->buildBitmapFilter(
+        *dm_context,
+        snap,
+        read_ranges,
+        rs_filter_results,
+        opt.read_ts,
+        DEFAULT_BLOCK_SIZE,
+        enable_version_chain);
+
+    auto bitmap_filter_delta_index = seg->buildBitmapFilter(
+        *dm_context,
+        snap,
+        read_ranges,
+        rs_filter_results,
+        opt.read_ts,
+        DEFAULT_BLOCK_SIZE,
+        !enable_version_chain);
+
+    if (opt.expected_bitmap)
+        ASSERT_EQ(bitmap_filter_version_chain->toDebugString(), *(opt.expected_bitmap))
+            << fmt::format("{}, bitmap_filter_delta_index={}", info, bitmap_filter_delta_index->toDebugString());
+
+    ASSERT_EQ(*bitmap_filter_delta_index, *bitmap_filter_version_chain) << fmt::format(
+        "{}, bitmap_filter_delta_index={}, bitmap_filter_version_chain={}",
+        info,
+        bitmap_filter_delta_index->toDebugString(),
+        bitmap_filter_version_chain->toDebugString());
 }
 
 INSTANTIATE_TEST_CASE_P(MVCC, SegmentBitmapFilterTest, /* is_common_handle */ ::testing::Bool());
@@ -586,21 +617,10 @@ try
             .expected_size = 20,
             .expected_row_id = "[5, 25)",
             .expected_handle = "[275, 295)",
-            .rowkey_range = std::tuple<Int64, Int64, bool>{275, 295, false}},
+            .rowkey_range = std::tuple<Int64, Int64, bool>{275, 295, false},
+            .expected_bitmap = = "000001111111111111111111100000",
+        },
         __LINE__);
-
-    auto [seg, snap] = getSegmentForRead(SEG_ID);
-    auto bitmap_filter = seg->buildBitmapFilter(
-        *dm_context,
-        snap,
-        {seg->getRowKeyRange()},
-        loadPackFilterResults(snap, {seg->getRowKeyRange()}),
-        std::numeric_limits<UInt64>::max(),
-        DEFAULT_BLOCK_SIZE,
-        enable_version_chain);
-    ASSERT_EQ(bitmap_filter->size(), 30);
-    ASSERT_EQ(bitmap_filter->count(), 20); // `count()` returns the number of bit has been set.
-    ASSERT_EQ(bitmap_filter->toDebugString(), "000001111111111111111111100000");
 }
 CATCH
 

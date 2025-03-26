@@ -38,7 +38,7 @@ protected:
     ColumnPtr hold_handle;
     RowKeyRanges read_ranges;
     bool is_common_handle = false;
-    bool enable_version_chain = true; // TODO:
+    bool enable_version_chain = true; // TODO
 
     void setRowKeyRange(Int64 begin, Int64 end, bool including_right_boundary);
 
@@ -75,6 +75,8 @@ protected:
         std::string expected_row_id;
         std::string expected_handle;
         std::optional<std::tuple<Int64, Int64, bool>> rowkey_range;
+
+        const std::optional<String> expected_bitmap;
     };
 
     void runTestCaseGeneric(TestCase test_case, int caller_line);
@@ -85,5 +87,28 @@ protected:
     DMFilePackFilterResults loadPackFilterResults(const SegmentSnapshotPtr & snap, const RowKeyRanges & ranges);
 
     void checkHandle(PageIdU64 seg_id, std::string_view seq_ranges, int caller_line);
+
+    struct VerifyVersionChainOption
+    {
+        const PageIdU64 seg_id;
+        const int caller_line; // For debug
+        const UInt64 read_ts = std::numeric_limits<UInt64>::max();
+        const std::optional<RowKeyRanges> read_ranges;
+        const std::optional<String> expected_bitmap;
+        const DMFilePackFilterResults rs_filter_results;
+
+        String toDebugString() const
+        {
+            return fmt::format(
+                "seg_id={}, caller_line={}, read_ts={}, read_ranges={}, expected_bitmap={}",
+                seg_id,
+                caller_line,
+                read_ts,
+                read_ranges,
+                expected_bitmap);
+        }
+    };
+
+    void verifyVersionChain(const VerifyVersionChainOption & opt);
 };
 } // namespace DB::DM::tests
