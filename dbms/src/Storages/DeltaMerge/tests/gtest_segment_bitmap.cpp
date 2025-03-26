@@ -36,21 +36,25 @@ void SegmentBitmapFilterTest::setRowKeyRange(Int64 begin, Int64 end, bool includ
 
 void SegmentBitmapFilterTest::writeSegmentGeneric(
     std::string_view seg_data,
-    std::optional<std::tuple<Int64, Int64, bool>> rowkey_range)
+    std::optional<std::tuple<Int64, Int64, bool>> rowkey_range,
+    const RowKeyRanges & read_ranges)
 {
     if (is_common_handle)
-        writeSegment<String>(seg_data, rowkey_range);
+        writeSegment<String>(seg_data, rowkey_range, read_ranges);
     else
-        writeSegment<Int64>(seg_data, rowkey_range);
+        writeSegment<Int64>(seg_data, rowkey_range, read_ranges);
 }
 
 template <typename HandleType>
 std::pair<const PaddedPODArray<UInt32> *, const std::optional<ColumnView<HandleType>>> SegmentBitmapFilterTest::
-    writeSegment(std::string_view seg_data, std::optional<std::tuple<Int64, Int64, bool>> rowkey_range)
+    writeSegment(
+        std::string_view seg_data,
+        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range,
+        const RowKeyRanges & read_ranges)
 {
-    if (rowkey_range)
+    if (seg_rowkey_range)
     {
-        const auto & [left, right, including_right_boundary] = *rowkey_range;
+        const auto & [left, right, including_right_boundary] = *seg_rowkey_range;
         setRowKeyRange(left, right, including_right_boundary);
     }
     auto seg_data_units = parseSegData(seg_data);
@@ -143,7 +147,8 @@ template <typename HandleType>
 void SegmentBitmapFilterTest::runTestCase(TestCase test_case, int caller_line)
 {
     auto info = fmt::format("caller_line={}", caller_line);
-    auto [row_id, handle] = writeSegment<HandleType>(test_case.seg_data, test_case.rowkey_range);
+    auto [row_id, handle]
+        = writeSegment<HandleType>(test_case.seg_data, test_case.seg_rowkey_range, test_case.read_ranges);
     if (test_case.expected_size == 0)
     {
         ASSERT_EQ(nullptr, row_id) << info;
@@ -438,15 +443,18 @@ CATCH
 TEST_P(SegmentBitmapFilterTest, Ranges)
 try
 {
-    read_ranges.emplace_back(buildRowKeyRange(222, 244, is_common_handle));
-    read_ranges.emplace_back(buildRowKeyRange(300, 303, is_common_handle));
-    read_ranges.emplace_back(buildRowKeyRange(555, 666, is_common_handle));
     runTestCaseGeneric(
         TestCase{
             .seg_data = "s:[0, 1024)|d_dr:[128, 256)|d_tiny_del:[300, 310)|d_tiny:[200, 255)|d_mem:[298, 305)",
             .expected_size = 136,
             .expected_row_id = "[1056, 1078)|[1091, 1094)|[555, 666)",
-            .expected_handle = "[222, 244)|[300, 303)|[555, 666)"},
+            .expected_handle = "[222, 244)|[300, 303)|[555, 666)",
+            .read_ranges = {
+                buildRowKeyRange(222, 244, is_common_handle),
+                buildRowKeyRange(300, 303, is_common_handle),
+                buildRowKeyRange(555, 666, is_common_handle),
+            },
+        },
         __LINE__);
 }
 CATCH
@@ -617,8 +625,8 @@ try
             .expected_size = 20,
             .expected_row_id = "[5, 25)",
             .expected_handle = "[275, 295)",
-            .rowkey_range = std::tuple<Int64, Int64, bool>{275, 295, false},
-            .expected_bitmap = = "000001111111111111111111100000",
+            .seg_rowkey_range = std::tuple<Int64, Int64, bool>{275, 295, false},
+            .expected_bitmap = "000001111111111111111111100000",
         },
         __LINE__);
 }

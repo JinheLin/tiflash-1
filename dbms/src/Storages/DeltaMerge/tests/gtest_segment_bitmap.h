@@ -36,7 +36,6 @@ protected:
     static constexpr auto SEG_ID = DELTA_MERGE_FIRST_SEGMENT_ID;
     ColumnPtr hold_row_id;
     ColumnPtr hold_handle;
-    RowKeyRanges read_ranges;
     bool is_common_handle = false;
     bool enable_version_chain = true; // TODO
 
@@ -44,7 +43,8 @@ protected:
 
     void writeSegmentGeneric(
         std::string_view seg_data,
-        std::optional<std::tuple<Int64, Int64, bool>> rowkey_range = std::nullopt);
+        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range = std::nullopt,
+        const RowKeyRanges & read_ranges = {});
 
     /*
     0----------------stable_rows----------------stable_rows + delta_rows <-- append
@@ -64,7 +64,8 @@ protected:
     template <typename HandleType>
     std::pair<const PaddedPODArray<UInt32> *, const std::optional<ColumnView<HandleType>>> writeSegment(
         std::string_view seg_data,
-        std::optional<std::tuple<Int64, Int64, bool>> rowkey_range);
+        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range,
+        const RowKeyRanges & read_ranges);
 
     void writeSegment(const SegDataUnit & unit);
 
@@ -74,7 +75,9 @@ protected:
         size_t expected_size;
         std::string expected_row_id;
         std::string expected_handle;
-        std::optional<std::tuple<Int64, Int64, bool>> rowkey_range;
+        std::optional<std::tuple<Int64, Int64, bool>> seg_rowkey_range;
+
+        RowKeyRanges read_ranges;
 
         const std::optional<String> expected_bitmap;
     };
