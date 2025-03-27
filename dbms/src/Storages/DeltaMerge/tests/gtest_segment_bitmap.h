@@ -87,7 +87,7 @@ protected:
 
     void checkHandle(PageIdU64 seg_id, std::string_view seq_ranges, int caller_line);
 
-    struct VerifyVersionChainOption
+    struct CheckBitmapOptions
     {
         const PageIdU64 seg_id;
         const int caller_line; // For debug
@@ -108,6 +108,6 @@ protected:
         }
     };
 
-    void verifyVersionChain(const VerifyVersionChainOption & opt);
+    void checkBitmap(const CheckBitmapOptions & opt);
 };
 } // namespace DB::DM::tests

@@ -155,7 +155,7 @@ void SegmentBitmapFilterTest::runTestCase(TestCase test_case, int caller_line)
         ASSERT_TRUE(sequenceEqual(expected_handle, handle)) << info;
     }
 
-    verifyVersionChain(VerifyVersionChainOption{
+    checkBitmap(CheckBitmapOptions{
         .seg_id = SEG_ID,
         .caller_line = caller_line,
         .expected_bitmap = test_case.expected_bitmap,
@@ -192,7 +192,7 @@ void SegmentBitmapFilterTest::checkHandle(PageIdU64 seg_id, std::string_view seq
     }
 }
 
-void SegmentBitmapFilterTest::verifyVersionChain(const VerifyVersionChainOption & opt)
+void SegmentBitmapFilterTest::checkBitmap(const CheckBitmapOptions & opt)
 {
     auto info = opt.toDebugString();
     auto [seg, snap] = getSegmentForRead(opt.seg_id);
@@ -463,19 +463,28 @@ try
     auto new_seg_id = splitSegmentAt(SEG_ID, 512, Segment::SplitMode::Logical);
     ASSERT_TRUE(new_seg_id.has_value());
     ASSERT_TRUE(areSegmentsSharingStable({SEG_ID, *new_seg_id}));
-    checkHandle(SEG_ID, "[0, 128)|[200, 255)|[256, 305)|[310, 512)", __LINE__);
 
+    checkHandle(SEG_ID, "[0, 128)|[200, 255)|[256, 305)|[310, 512)", __LINE__);
     auto left_row_id = getSegmentRowId(SEG_ID, {});
     const auto & left_r = toColumnVectorData<UInt32>(left_row_id);
     auto expected_left_row_id = genSequence<UInt32>("[0, 128)|[1034, 1089)|[256, 298)|[1089, 1096)|[310, 512)");
     ASSERT_TRUE(sequenceEqual(expected_left_row_id, left_r));
 
     checkHandle(*new_seg_id, "[512, 1024)", __LINE__);
-
     auto right_row_id = getSegmentRowId(*new_seg_id, {});
     const auto & right_r = toColumnVectorData<UInt32>(right_row_id);
     auto expected_right_row_id = genSequence<UInt32>("[512, 1024)");
     ASSERT_TRUE(sequenceEqual(expected_right_row_id, right_r));
+
+    checkBitmap(CheckBitmapOptions{
+        .seg_id = SEG_ID,
+        .caller_line = __LINE__,
+    });
+
+    checkBitmap(CheckBitmapOptions{
+        .seg_id = *new_seg_id,
+        .caller_line = __LINE__,
+    });
 }
 CATCH
 
@@ -487,17 +496,11 @@ TEST_P(SegmentBitmapFilterTest, CleanStable)
     ASSERT_EQ(seg->getDelta()->getRows(), 0);
     ASSERT_EQ(seg->getDelta()->getDeletes(), 0);
     ASSERT_EQ(seg->getStable()->getRows(), 25000);
-    auto bitmap_filter = seg->buildBitmapFilterStableOnly(
-        *dm_context,
-        snap,
-        {seg->getRowKeyRange()},
-        loadPackFilterResults(snap, {seg->getRowKeyRange()}),
-        std::numeric_limits<UInt64>::max(),
-        DEFAULT_BLOCK_SIZE);
-    ASSERT_NE(bitmap_filter, nullptr);
-    std::string expect_result;
-    expect_result.append(std::string(25000, '1'));
-    ASSERT_EQ(bitmap_filter->toDebugString(), expect_result);
+    checkBitmap(CheckBitmapOptions{
+        .seg_id = SEG_ID,
+        .caller_line = __LINE__,
+        .expected_bitmap = String(25000, '1'),
+    });
 }
 
 TEST_P(SegmentBitmapFilterTest, NotCleanStable)
@@ -509,42 +512,32 @@ TEST_P(SegmentBitmapFilterTest, NotCleanStable)
     ASSERT_EQ(seg->getDelta()->getDeletes(), 0);
     ASSERT_EQ(seg->getStable()->getRows(), 20000);
     {
-        auto bitmap_filter = seg->buildBitmapFilterStableOnly(
-            *dm_context,
-            snap,
-            {seg->getRowKeyRange()},
-            loadPackFilterResults(snap, {seg->getRowKeyRange()}),
-            std::numeric_limits<UInt64>::max(),
-            DEFAULT_BLOCK_SIZE);
-        ASSERT_NE(bitmap_filter, nullptr);
-        std::string expect_result;
+        String expect_result;
         expect_result.append(std::string(5000, '1'));
         for (int i = 0; i < 5000; i++)
-        {
             expect_result.append(std::string("01"));
-        }
         expect_result.append(std::string(5000, '1'));
-        ASSERT_EQ(bitmap_filter->toDebugString(), expect_result);
+        checkBitmap(CheckBitmapOptions{
+            .seg_id = SEG_ID,
+            .caller_line = __LINE__,
+            .expected_bitmap = expect_result,
+        });
     }
+
     {
         // Stale read
         ASSERT_EQ(version, 2);
-        auto bitmap_filter = seg->buildBitmapFilterStableOnly(
-            *dm_context,
-            snap,
-            {seg->getRowKeyRange()},
-            loadPackFilterResults(snap, {seg->getRowKeyRange()}),
-            1,
-            DEFAULT_BLOCK_SIZE);
-        ASSERT_NE(bitmap_filter, nullptr);
-        std::string expect_result;
-        expect_result.append(std::string(5000, '1'));
+        String expect_result;
+        expect_result.append(String(5000, '1'));
         for (int i = 0; i < 5000; i++)
-        {
-            expect_result.append(std::string("10"));
-        }
-        expect_result.append(std::string(5000, '0'));
-        ASSERT_EQ(bitmap_filter->toDebugString(), expect_result);
+            expect_result.append(String("10"));
+        expect_result.append(String(5000, '0'));
+        checkBitmap(CheckBitmapOptions{
+            .seg_id = SEG_ID,
+            .caller_line = __LINE__,
+            .read_ts = 1,
+            .expected_bitmap = expect_result,
+        });
     }
 }
 
@@ -557,20 +550,17 @@ TEST_P(SegmentBitmapFilterTest, StableRange)
     ASSERT_EQ(seg->getDelta()->getDeletes(), 0);
     ASSERT_EQ(seg->getStable()->getRows(), 50000);
 
-    auto ranges = std::vector<RowKeyRange>{buildRowKeyRange(10000, 50000, is_common_handle)}; // [10000, 50000)
-    auto bitmap_filter = seg->buildBitmapFilterStableOnly(
-        *dm_context,
-        snap,
-        ranges,
-        loadPackFilterResults(snap, ranges),
-        std::numeric_limits<UInt64>::max(),
-        DEFAULT_BLOCK_SIZE);
-    ASSERT_NE(bitmap_filter, nullptr);
-    std::string expect_result;
+    String expect_result;
     // [0, 10000) is filtered by range.
-    expect_result.append(std::string(10000, '0'));
-    expect_result.append(std::string(40000, '1'));
-    ASSERT_EQ(bitmap_filter->toDebugString(), expect_result);
+    expect_result.append(String(10000, '0'));
+    expect_result.append(String(40000, '1'));
+    const auto ranges = RowKeyRanges{buildRowKeyRange(10000, 50000, is_common_handle)}; // [10000, 50000)
+    checkBitmap(CheckBitmapOptions{
+        .seg_id = SEG_ID,
+        .caller_line = __LINE__,
+        .read_ranges = ranges,
+        .expected_bitmap = expect_result,
+    });
 }
 
 TEST_P(SegmentBitmapFilterTest, StableLogicalSplit)
@@ -584,23 +574,29 @@ try
     ASSERT_EQ(seg->getStable()->getRows(), 50000);
 
     auto new_seg_id = splitSegmentAt(SEG_ID, 25000, Segment::SplitMode::Logical);
-
     ASSERT_TRUE(new_seg_id.has_value());
     ASSERT_TRUE(areSegmentsSharingStable({SEG_ID, *new_seg_id}));
 
     checkHandle(SEG_ID, "[0, 25000)", __LINE__);
-
     auto left_row_id = getSegmentRowId(SEG_ID, {});
     const auto & left_r = toColumnVectorData<UInt32>(left_row_id);
     auto expected_left_row_id = genSequence<UInt32>("[0, 25000)");
     ASSERT_TRUE(sequenceEqual(expected_left_row_id, left_r));
 
     checkHandle(*new_seg_id, "[25000, 50000)", __LINE__);
-
     auto right_row_id = getSegmentRowId(*new_seg_id, {});
     const auto & right_r = toColumnVectorData<UInt32>(right_row_id);
     auto expected_right_row_id = genSequence<UInt32>("[25000, 50000)");
     ASSERT_TRUE(sequenceEqual(expected_right_row_id, right_r));
+
+    checkBitmap(CheckBitmapOptions{
+        .seg_id = SEG_ID,
+        .caller_line = __LINE__,
+    });
+    checkBitmap(CheckBitmapOptions{
+        .seg_id = *new_seg_id,
+        .caller_line = __LINE__,
+    });
 }
 CATCH
 
