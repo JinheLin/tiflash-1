@@ -636,26 +636,18 @@ try
 
     // For Stable, all packs of DMFile will be considered in BitmapFilter.
     setRowKeyRange(275, 295, false); // Shrinking range
-    auto [seg, snap] = getSegmentForRead(SEG_ID);
-    auto bitmap_filter = seg->buildBitmapFilter(
-        *dm_context,
-        snap,
-        {seg->getRowKeyRange()},
-        loadPackFilterResults(snap, {seg->getRowKeyRange()}),
-        std::numeric_limits<UInt64>::max(),
-        DEFAULT_BLOCK_SIZE,
-        enable_version_chain);
-    ASSERT_EQ(bitmap_filter->size(), 750);
-    ASSERT_EQ(bitmap_filter->count(), 20); // `count()` returns the number of bit has been set.
-    ASSERT_EQ(
-        bitmap_filter->toDebugString(),
-        "00000000000000000000000001111111111111111111100000000000000000000000000000000000000000000000000000000000000000"
-        "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-        "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");
+    checkBitmap(CheckBitmapOptions{
+        .seg_id = SEG_ID,
+        .caller_line = __LINE__,
+        .expected_bitmap
+        = "000000000000000000000000011111111111111111111000000000000000000000000000000000000000000000000000000000000000"
+          "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    });
 }
 CATCH
 
@@ -715,10 +707,14 @@ TEST_P(SegmentBitmapFilterTest, testSkipPackStableOnly)
                 ASSERT_EQ(pack_res[i], RSResult::Some);
         }
 
-        auto bitmap_filter
-            = seg->buildBitmapFilterStableOnly(*dm_context, snap, ranges, pack_filter_results, 2, DEFAULT_BLOCK_SIZE);
-
-        ASSERT_EQ(expect_result, bitmap_filter->toDebugString());
+        checkBitmap(CheckBitmapOptions{
+            .seg_id = SEG_ID,
+            .caller_line = __LINE__,
+            .read_ts = 2,
+            .read_ranges = ranges,
+            .expected_bitmap = expect_result,
+            .rs_filter_results = pack_filter_results,
+        });
 
         deleteRangeSegment(SEG_ID);
     }
@@ -835,15 +831,14 @@ TEST_P(SegmentBitmapFilterTest, testSkipPackNormal)
             }
         }
 
-        auto bitmap_filter = seg->buildBitmapFilterNormal(
-            *dm_context,
-            snap,
-            ranges,
-            pack_filter_results,
-            start_ts,
-            DEFAULT_BLOCK_SIZE);
-
-        ASSERT_EQ(expect_result, bitmap_filter->toDebugString());
+        checkBitmap(CheckBitmapOptions{
+            .seg_id = SEG_ID,
+            .caller_line = __LINE__,
+            .read_ts = start_ts,
+            .read_ranges = ranges,
+            .expected_bitmap = expect_result,
+            .rs_filter_results = pack_filter_results,
+        });
 
         deleteRangeSegment(SEG_ID);
     }
