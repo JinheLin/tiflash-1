@@ -72,6 +72,6 @@ DMContext::DMContext(
 
 bool DMContext::enableVersionChain() const
 {
-    return global_context.getSettingsRef().enable_version_chain;
+    return global_context.getSettingsRef().enable_version_chain != 0;
 }
 } // namespace DB::DM

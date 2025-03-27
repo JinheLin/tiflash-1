@@ -574,10 +574,19 @@ public:
 // For some tests only for delta-index, use this function to diable version-chain temporarily.
 [[nodiscard]] inline auto disableVersionChainTemporary(Settings & settings)
 {
-    const Int64 enable_version_chain = settings.enable_version_chain;
+    const Int64 initial_config = settings.enable_version_chain;
     settings.set("enable_version_chain", "0");
-    return ext::make_scope_guard([enable_version_chain, &settings]() {
-        settings.set("enable_version_chain", std::to_string(enable_version_chain));
-    });
+    return ext::make_scope_guard(
+        [initial_config, &settings]() { settings.set("enable_version_chain", std::to_string(initial_config)); });
 }
+
+[[nodiscard]] inline auto enableVersionChainTemporary(Settings & settings)
+{
+    const Int64 initial_config = settings.enable_version_chain;
+    settings.set("enable_version_chain", "1");
+    return ext::make_scope_guard(
+        [initial_config, &settings]() { settings.set("enable_version_chain", std::to_string(initial_config)); });
+}
+
+
 } // namespace DB::DM::tests
