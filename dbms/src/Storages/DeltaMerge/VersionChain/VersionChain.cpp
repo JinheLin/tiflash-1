@@ -234,50 +234,59 @@ UInt32 VersionChain<HandleType>::replayColumnFileBig(
     const std::span<const ColumnFilePtr> preceding_cfs,
     DeltaValueReader & delta_reader)
 {
-    auto cf_big_min_max = loadDMFileHandleRange<HandleType>(dm_context, *(cf_big.getFile()));
-    if (!cf_big_min_max) // DMFile is empty.
-        return 0;
+    const auto cf_big_range = cf_big.getRange();
 
-    HandleRefType cf_big_min = cf_big_min_max->first;
-    HandleRefType cf_big_max = cf_big_min_max->second;
+    auto is_cf_big_intersect = [&](const ColumnFileBig & preceding_cf_big) {
+        return preceding_cf_big.getRange().intersect(cf_big_range);
+    };
 
-    // If a ColumnFileBig is ingested by apply snapshot, its preceding should be a ColumnFileDeleteRange.
-    auto is_apply_snapshot = [&]() {
-        if (dmfile_or_delete_range_list.empty())
-            return false;
-        if (auto * delete_range = std::get_if<RowKeyRange>(&dmfile_or_delete_range_list.back()); delete_range)
-            return inRowKeyRange(*delete_range, cf_big_min) && inRowKeyRange(*delete_range, cf_big_max);
+    auto is_cf_delete_range_include = [&](const ColumnFileDeleteRange & preceding_cf_delete_range) {
+        return preceding_cf_delete_range.getDeleteRange().checkRangeIncluded(cf_big_range);
+    };
+
+    auto is_intersect_with_preceding_cfs = [&]() {
+        // Check preceding data from new to old.
+        for (const auto & preceding_cf : preceding_cfs | std::views::reverse)
+        {
+            if (const auto * preceding_cf_big = preceding_cf->tryToBigFile(); preceding_cf_big)
+            {
+                if (is_cf_big_intersect(*preceding_cf_big))
+                    return true;
+            }
+            else if (const auto * preceding_cf_delete_range = preceding_cf->tryToDeleteRange();
+                     preceding_cf_delete_range)
+            {
+                if (is_cf_delete_range_include(*preceding_cf_delete_range))
+                    return false; // Data older than this delete range and intersect with cf_big_range should be deleted.
+            }
+            else
+            {
+                // For cf_tiny and cf_in_memory, it does not have a range now.
+                // So we treat it as intersect with cf_big_range for safety.
+                // TODO: add range to cf_tiny and cf_in_memory.
+                return true;
+            }
+        }
         return false;
     };
 
-    auto is_dmfile_intersect = [&](const DMFile & file) {
-        auto file_min_max = loadDMFileHandleRange<HandleType>(dm_context, file);
-        if (!file_min_max)
-            return false;
-        const auto & [file_min, file_max] = *file_min_max;
-        return cf_big_min <= file_max && file_min <= cf_big_max;
-    };
-    // If a ColumnFileBig is ingested by ingest sst, it should not intersect with any preceding ColumnFile.
-    // Also, it should not have other ColumnFileTiny, ColumnFileInMemory or ColumnFileDeleteRange.
-    auto is_ingest_sst = [&]() {
+    auto is_intersect_with_stable = [&]() {
         for (const auto & file : stable.getDMFiles())
-            if (is_dmfile_intersect(*file))
-                return false;
-
-        for (const auto & cf : preceding_cfs)
         {
-            if (const auto * t = cf->tryToBigFile(); t)
-            {
-                if (is_dmfile_intersect(*(t->getFile())))
-                    return false;
-            }
-            else
-                return false;
+            auto min_max = loadDMFileHandleRange<HandleType>(dm_context, *file);
+            if (!min_max)
+                continue;
+            const HandleRefType min = min_max->first;
+            const HandleRefType max = min_max->second;
+            if (inRowKeyRange(cf_big_range, min) || inRowKeyRange(cf_big_range, max))
+                return true;
         }
-        return true;
+        return false;
     };
 
-    if (likely(is_apply_snapshot() || is_ingest_sst()))
+    // This is a optimized path for ColumnFileBig.
+    // If a cf_big does not intersect with preceding cfs and stable, there is no version older than its handles.
+    if (likely(is_intersect_with_preceding_cfs() || is_intersect_with_stable()))
     {
         const UInt32 rows = cf_big.getRows();
         const UInt32 start_row_id = base_versions->size() + stable_rows;
@@ -287,7 +296,7 @@ UInt32 VersionChain<HandleType>::replayColumnFileBig(
             DMFileHandleIndex<HandleType>{dm_context, cf_big.getFile(), start_row_id, cf_big.getRange()});
         return rows;
     }
-    // If a ColumnFileBig is not ingested by apply snapshot or ingest sst, it should be replayed as normal write.
+    // Replayed cf_big as normal write.
     // At present, only testing may take this path.
     LOG_WARNING(
         Logger::get(dm_context.tracing_id),
