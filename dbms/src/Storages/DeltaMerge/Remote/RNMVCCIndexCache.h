@@ -34,9 +34,11 @@ namespace DB::DM::Remote
  * A LRU cache that holds delta-tree indexes from different remote write nodes.
  * Delta-tree indexes are used as much as possible when same segments are accessed multiple times.
  */
+template <typename T>
 class RNMVCCIndexCache : private boost::noncopyable
 {
 public:
+    using TPtr = std::shared_ptr<T>;
     explicit RNMVCCIndexCache(size_t max_cache_size)
         : cache(max_cache_size)
     {}
@@ -49,63 +51,28 @@ public:
         UInt64 segment_epoch;
         UInt64 delta_index_epoch;
         KeyspaceID keyspace_id;
-        bool is_version_chain;
 
         bool operator==(const CacheKey & other) const
         {
             return store_id == other.store_id && keyspace_id == other.keyspace_id && table_id == other.table_id
                 && segment_id == other.segment_id && segment_epoch == other.segment_epoch
-                && delta_index_epoch == other.delta_index_epoch && is_version_chain == other.is_version_chain;
+                && delta_index_epoch == other.delta_index_epoch;
         }
     };
 
-    // Returns a cached or newly created delta index, which is assigned to the specified segment(at)epoch.
-    DeltaIndexPtr getDeltaIndex(const CacheKey & key);
-    // `setDeltaIndex` will updated cache size and remove overflows if necessary.
-    void setDeltaIndex(const CacheKey & key, const DeltaIndexPtr & delta_index);
-
-    // Similar to `getDeltaIndex`, but this method is used to get version chain.
-    GenericVersionChainPtr getVersionChain(const CacheKey & key, bool is_common_handle);
-    // Similar to `setDeltaIndex`, but this method is used to set version chain.
-    void setVersionChain(const CacheKey & key, const GenericVersionChainPtr & version_chain);
+    TPtr get(const CacheKey & key);
+    void set(const CacheKey & key, const TPtr & value);
 
     size_t getCacheWeight() const { return cache.weight(); }
     size_t getCacheCount() const { return cache.count(); }
 
 private:
-    struct CacheDeltaIndex
-    {
-        CacheDeltaIndex(const DeltaIndexPtr & delta_index_, size_t bytes_)
-            : delta_index(delta_index_)
-            , bytes(bytes_)
-        {}
-
-        DeltaIndexPtr delta_index;
-        size_t bytes;
-    };
-
-    struct CacheVersionChain
-    {
-        CacheVersionChain(const GenericVersionChainPtr & version_chain_, size_t bytes_)
-            : version_chain(version_chain_)
-            , bytes(bytes_)
-        {}
-
-        GenericVersionChainPtr version_chain;
-        size_t bytes;
-    };
+    static size_t getBytes(const TPtr & ptr) const;
+    
     struct CacheValue
     {
-        std::variant<CacheDeltaIndex, CacheVersionChain> value;
-
-        size_t bytes() const
-        {
-            return std::visit([](const auto & v) { return v.bytes; }, value);
-        }
-
-        DeltaIndexPtr getDeltaIndex() const { return std::get<CacheDeltaIndex>(value).delta_index; }
-
-        GenericVersionChainPtr getVersionChain() const { return std::get<CacheVersionChain>(value).version_chain; }
+        TPtr value;
+        size_t bytes;
     };
 
     struct CacheKeyHasher
@@ -119,14 +86,13 @@ private:
             boost::hash_combine(seed, k.segment_epoch);
             boost::hash_combine(seed, k.delta_index_epoch);
             boost::hash_combine(seed, k.keyspace_id);
-            boost::hash_combine(seed, k.is_version_chain);
             return seed;
         }
     };
 
     struct CacheValueWeight
     {
-        size_t operator()(const CacheKey & key, const CacheValue & v) const { return sizeof(key) + v.bytes(); }
+        size_t operator()(const CacheKey & key, const CacheValue & v) const { return sizeof(key) + v.bytes; }
     };
 
 private:

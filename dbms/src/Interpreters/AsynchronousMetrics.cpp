@@ -207,10 +207,15 @@ void AsynchronousMetrics::update()
     }
 
     {
-        if (auto rn_mvcc_index_cache = context.getSharedContextDisagg()->rn_mvcc_index_cache)
+        if (auto rn_delta_index_cache = context.getSharedContextDisagg()->rn_delta_index_cache)
         {
-            set("RNMVCCIndexCacheBytes", rn_mvcc_index_cache->getCacheWeight());
-            set("RNMVCCIndexFiles", rn_mvcc_index_cache->getCacheCount());
+            set("RNMVCCIndexCacheBytes", rn_delta_index_cache->getCacheWeight());
+            set("RNMVCCIndexFiles", rn_delta_index_cache->getCacheCount());
+        }
+        if (auto rn_version_chain_cache = context.getSharedContextDisagg()->rn_version_chain_cache)
+        {
+            set("RNMVCCIndexCacheBytes", rn_version_chain_cache->getCacheWeight());
+            set("RNMVCCIndexFiles", rn_version_chain_cache->getCacheCount());
         }
     }
 

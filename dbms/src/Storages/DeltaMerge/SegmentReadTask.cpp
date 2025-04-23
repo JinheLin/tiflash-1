@@ -818,11 +818,8 @@ bool SegmentReadTask::hasColumnFileToFetch() const
 
 std::optional<Remote::RNMVCCIndexCache::CacheKey> SegmentReadTask::getRNMVCCIndexCacheKey(ReadMode read_mode) const
 {
-    if (!dm_context->global_context.getSharedContextDisagg()->isDisaggregatedComputeMode())
-        return std::nullopt;
-
-    auto & cache = dm_context->global_context.getSharedContextDisagg()->rn_mvcc_index_cache;
-    if (!cache)
+    const auto & disagg_ctx = dm_context->global_context.getSharedContextDisagg();
+    if (!disagg_ctx->isDisaggregatedComputeMode() || !disagg_ctx->isMVCCCacheEnabled())
         return std::nullopt;
 
     return Remote::RNMVCCIndexCache::CacheKey{
@@ -832,7 +829,6 @@ std::optional<Remote::RNMVCCIndexCache::CacheKey> SegmentReadTask::getRNMVCCInde
         .segment_epoch = segment->segmentEpoch(),
         .delta_index_epoch = read_snapshot->delta->getDeltaIndexEpoch(),
         .keyspace_id = dm_context->keyspace_id,
-        .is_version_chain = read_mode == ReadMode::Bitmap && dm_context->isVersionChainEnabled(),
     };
 }
 
@@ -842,17 +838,18 @@ size_t SegmentReadTask::prepareMVCCIndex(ReadMode read_mode)
     if (!cache_key)
         return 0;
 
-    auto & cache = dm_context->global_context.getSharedContextDisagg()->rn_mvcc_index_cache;
-    assert(cache != nullptr);
-    if (cache_key->is_version_chain)
+    const auto & disagg_ctx = dm_context->global_context.getSharedContextDisagg();
+    const bool use_version_chain = read_mode == ReadMode::Bitmap && dm_context->isVersionChainEnabled();
+
+    if (use_version_chain)
     {
-        auto version_chain = cache->getVersionChain(*cache_key, dm_context->is_common_handle);
+        auto version_chain = disagg_ctx->rn_version_chain_cache->get(*cache_key, dm_context->is_common_handle);
         segment->setVersionChain(version_chain);
         return getVersionChainBytes(*version_chain);
     }
     else
     {
-        auto delta_index = cache->getDeltaIndex(*cache_key);
+        auto delta_index = disagg_ctx->rn_delta_index_cache->get(*cache_key, dm_context->is_common_handle);
         read_snapshot->delta->setSharedDeltaIndex(delta_index);
         return delta_index->getBytes();
     }
@@ -864,12 +861,12 @@ void SegmentReadTask::updateMVCCIndexSize(ReadMode read_mode, size_t initial_ind
     if (!cache_key)
         return;
 
-    auto & cache = dm_context->global_context.getSharedContextDisagg()->rn_mvcc_index_cache;
-    assert(cache != nullptr);
-    if (cache_key->is_version_chain && getVersionChainBytes(*(segment->getVersionChain())) != initial_index_bytes)
-        cache->setVersionChain(*cache_key, segment->getVersionChain());
+    const auto & disagg_ctx = dm_context->global_context.getSharedContextDisagg();
+    const bool use_version_chain = read_mode == ReadMode::Bitmap && dm_context->isVersionChainEnabled();
+    if (use_version_chain && getVersionChainBytes(*(segment->getVersionChain())) != initial_index_bytes)
+        disagg_ctx->rn_version_chain_cache->set(*cache_key, segment->getVersionChain());
     else if (
-        !cache_key->is_version_chain && read_snapshot->delta->getSharedDeltaIndex()->getBytes() != initial_index_bytes)
-        cache->setDeltaIndex(*cache_key, read_snapshot->delta->getSharedDeltaIndex());
+        !use_version_chain && read_snapshot->delta->getSharedDeltaIndex()->getBytes() != initial_index_bytes)
+        disagg_ctx->rn_delta_index_cache->set(*cache_key, read_snapshot->delta->getSharedDeltaIndex());
 }
 } // namespace DB::DM

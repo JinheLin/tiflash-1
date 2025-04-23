@@ -67,7 +67,9 @@ struct SharedContextDisagg : private boost::noncopyable
 
     /// Only for read node.
     /// It is a cache for the delta index, stores in the memory.
-    DB::DM::Remote::RNMVCCIndexCachePtr rn_mvcc_index_cache;
+    DB::DM::Remote::RNMVCCIndexCachePtr rn_delta_index_cache;
+    /// It is a cache for the version chain, stores in the memory.
+    DB::DM::Remote::RNMVCCIndexCachePtr rn_version_chain_cache;
 
     static SharedContextDisaggPtr create(Context & global_context_)
     {
@@ -98,6 +100,11 @@ struct SharedContextDisagg : private boost::noncopyable
     bool isDisaggregatedStorageMode() const { return disaggregated_mode == DisaggregatedMode::Storage; }
 
     bool notDisaggregatedMode() const { return disaggregated_mode == DisaggregatedMode::None; }
+
+    bool isMVCCCacheEnabled() const
+    {
+        return rn_delta_index_cache != nullptr && rn_version_chain_cache != nullptr;
+    }
 };
 
 } // namespace DB

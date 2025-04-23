@@ -36,48 +36,39 @@ void reportCacheHitStats(bool miss)
 }
 } // namespace
 
-DeltaIndexPtr RNMVCCIndexCache::getDeltaIndex(const CacheKey & key)
+template <typename T>
+std::shared_ptr<T> RNMVCCIndexCache::get(const CacheKey & key)
 {
-    RUNTIME_CHECK(!key.is_version_chain);
     auto [value, miss] = cache.getOrSet(key, [] {
-        return std::make_shared<CacheValue>(CacheDeltaIndex(std::make_shared<DeltaIndex>(), 0));
+        return std::make_shared<CacheValue>(std::make_shared<T>(), 0);
     });
     reportCacheHitStats(miss);
-    return value->getDeltaIndex();
+    return value->value;
 }
 
-void RNMVCCIndexCache::setDeltaIndex(const CacheKey & key, const DeltaIndexPtr & delta_index)
+template <typename T>
+void RNMVCCIndexCache::set(const CacheKey & key, const TPtr & new_value)
 {
-    RUNTIME_CHECK(delta_index != nullptr);
     std::lock_guard lock(mtx);
-    if (auto value = cache.get(key); value)
+    if (auto cached_value = cache.get(key); cached_value)
     {
-        cache.set(key, std::make_shared<CacheValue>(CacheDeltaIndex(delta_index, delta_index->getBytes())));
+        cache.set(key, std::make_shared<CacheValue>(new_value, getBytes(new_value)));
         CurrentMetrics::set(CurrentMetrics::DT_DeltaIndexCacheSize, cache.weight());
     }
 }
 
-GenericVersionChainPtr RNMVCCIndexCache::getVersionChain(const CacheKey & key, bool is_common_handle)
+template <typename T>
+size_t RNMVCCIndexCache::getBytes(const TPtr & ptr) const
 {
-    RUNTIME_CHECK(key.is_version_chain);
-    auto [value, miss] = cache.getOrSet(key, [is_common_handle] {
-        return std::make_shared<CacheValue>(CacheVersionChain(createVersionChain(is_common_handle), 0));
-    });
-    reportCacheHitStats(miss);
-    return value->getVersionChain();
+    if constexpr (std::is_same_v<T, DeltaIndex>)
+        return ptr->getBytes();
+    else if constexpr (std::is_same_v<T, VersionChain>)
+        return getVersionChainBytes(ptr);
+    else
+        static_assert(false, "Unsupported type for getBytes");
 }
 
-void RNMVCCIndexCache::setVersionChain(const CacheKey & key, const GenericVersionChainPtr & version_chain)
-{
-    RUNTIME_CHECK(version_chain != nullptr);
-    std::lock_guard lock(mtx);
-    if (auto value = cache.get(key); value)
-    {
-        cache.set(
-            key,
-            std::make_shared<CacheValue>(CacheVersionChain(version_chain, getVersionChainBytes(*version_chain))));
-        CurrentMetrics::set(CurrentMetrics::DT_DeltaIndexCacheSize, cache.weight());
-    }
-}
 
+template class RNMVCCIndexCache<DeltaIndex>;
+template class RNMVCCIndexCache<VersionChain>;
 } // namespace DB::DM::Remote
