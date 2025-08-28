@@ -1271,6 +1271,12 @@ public:
     void registerStorageThreadMemory(const std::string & k);
     void setProvideProxyProcessMetrics(bool v);
 
+    prometheus::Counter & TiFlashMetrics::getStorageReadRUCounter(
+        KeyspaceID keyspace,
+        const char * resource_group,
+        const char * type, // "mvcc" or "query"
+    );
+
 private:
     TiFlashMetrics();
 
@@ -1307,6 +1313,11 @@ private:
     prometheus::Family<prometheus::Gauge> * registered_storage_thread_memory_usage_family;
     std::shared_mutex storage_thread_report_mtx;
     std::unordered_map<std::string, prometheus::Gauge *> registered_storage_thread_memory_usage_metrics;
+
+    prometheus::Family<prometheus::Counter> * registered_storage_read_ru_family;
+    std::shared_mutex storage_read_ru_mtx;
+    // keyspace_resource-group_type -> Counter
+    std::unordered_map<std::string, prometheus::Counter *> registered_keyspace_storage_read_ru_metrics;
 
 public:
 #define MAKE_METRIC_MEMBER_M(family_name, help, type, ...) \

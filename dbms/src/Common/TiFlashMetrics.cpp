@@ -66,6 +66,11 @@ TiFlashMetrics::TiFlashMetrics()
 
     registered_storage_thread_memory_usage_family
         = &prometheus::BuildGauge().Name(storages_thread_memory_usage).Help("").Register(*registry);
+
+    registered_storage_read_ru_family = &prometheus::BuildCounter()
+                                             .Name("tiflash_storage_read_ru")
+                                             .Help("RU for read of keyspace")
+                                             .Register(*registry);
 }
 
 void TiFlashMetrics::addReplicaSyncRU(UInt32 keyspace_id, UInt64 ru)
@@ -210,4 +215,49 @@ void TiFlashMetrics::setProvideProxyProcessMetrics(bool v)
     process_collector->include_proxy_metrics = v;
 }
 
+prometheus::Counter * TiFlashMetrics::getReplicaSyncRUCounter(UInt32 keyspace_id, std::unique_lock<std::mutex> &)
+{
+    auto itr = registered_keyspace_sync_replica_ru.find(keyspace_id);
+    if (likely(itr != registered_keyspace_sync_replica_ru.end()))
+    {
+        return itr->second;
+    }
+    return registered_keyspace_sync_replica_ru[keyspace_id]
+        = &registered_keyspace_sync_replica_ru_family->Add({{"keyspace_id", std::to_string(keyspace_id)}});
+}
+
+prometheus::Counter & TiFlashMetrics::getStorageReadRUCounter(
+    KeyspaceID keyspace,
+    const char * resource_group,
+    const char * type, // "mvcc" or "query"
+)
+{
+    auto key = fmt::format("{}_{}_{}", keyspace, resource_group, type);
+
+    // Fast path
+    {
+        std::shared_lock lock(storage_read_ru_mtx);
+        auto it = registered_keyspace_storage_read_ru_metrics.find(key);
+        if (it != registered_keyspace_storage_read_ru_metrics.end())
+        {
+            return *(it->second);
+        }
+    }
+
+    {
+        std::unique_lock lock(storage_read_ru_mtx);
+        // double-check: other threads may create the same counter
+        auto it = registered_keyspace_storage_read_ru_metrics.find(key);
+        if (it != registered_keyspace_storage_read_ru_metrics.end())
+        {
+            return *(it->second);
+        }
+
+        // Create new counter
+        auto & counter = registered_storage_read_ru_family->Add(
+            {{"keyspace", std::to_string(keyspace)}, {"resource_group", resource_group}, {"type", type}});
+        registered_keyspace_storage_read_ru_metrics[key] = &counter;
+        return counter;
+    }
+}
 } // namespace DB
