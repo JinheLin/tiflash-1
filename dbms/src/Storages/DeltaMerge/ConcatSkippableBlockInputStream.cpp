@@ -14,7 +14,6 @@
 
 #include <Columns/countBytesInFilter.h>
 #include <Storages/DeltaMerge/ConcatSkippableBlockInputStream.h>
-#include <Storages/DeltaMerge/ScanContext.h>
 #include <Storages/DeltaMerge/SegmentRowID.h>
 #include <Storages/KVStore/Types.h>
 
@@ -24,14 +23,9 @@ namespace DB::DM
 template <bool need_row_id>
 ConcatSkippableBlockInputStream<need_row_id>::ConcatSkippableBlockInputStream(
     SkippableBlockInputStreams && inputs_,
-    std::vector<size_t> && rows_,
-    const ScanContextPtr & scan_context_)
+    std::vector<size_t> && rows_)
     : rows(std::move(rows_))
     , precede_stream_rows(0)
-    , scan_context(scan_context_)
-    , lac_bytes_collector(
-          scan_context_ ? scan_context_->keyspace_id : NullspaceID,
-          scan_context_ ? scan_context_->resource_group_name : "")
 {
     assert(rows.size() == inputs_.size());
     children.insert(children.end(), inputs_.begin(), inputs_.end());
@@ -107,7 +101,6 @@ Block ConcatSkippableBlockInputStream<need_row_id>::readWithFilter(const IColumn
         if (res)
         {
             res.setStartOffset(res.startOffset() + precede_stream_rows);
-            addReadBytes(res.bytes());
             break;
         }
         else
@@ -135,7 +128,6 @@ Block ConcatSkippableBlockInputStream<need_row_id>::read()
             {
                 res.setSegmentRowIdCol(createSegmentRowIdCol(res.startOffset(), res.rows()));
             }
-            addReadBytes(res.bytes());
             break;
         }
         else
@@ -147,19 +139,6 @@ Block ConcatSkippableBlockInputStream<need_row_id>::read()
     }
 
     return res;
-}
-
-template <bool need_row_id>
-void ConcatSkippableBlockInputStream<need_row_id>::addReadBytes(UInt64 bytes)
-{
-    if (likely(scan_context != nullptr))
-    {
-        scan_context->user_read_bytes += bytes;
-        if constexpr (!need_row_id)
-        {
-            lac_bytes_collector.collect(bytes);
-        }
-    }
 }
 
 template class ConcatSkippableBlockInputStream<false>;

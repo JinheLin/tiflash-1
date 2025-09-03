@@ -16,7 +16,6 @@
 
 #include <Flash/ResourceControl/LocalAdmissionController.h>
 #include <Storages/DeltaMerge/ConcatSkippableBlockInputStream_fwd.h>
-#include <Storages/DeltaMerge/ScanContext_fwd.h>
 #include <Storages/DeltaMerge/SkippableBlockInputStream.h>
 
 
@@ -29,19 +28,16 @@ class ConcatSkippableBlockInputStream : public SkippableBlockInputStream
 public:
     static auto create(
         SkippableBlockInputStreams && inputs_,
-        std::vector<size_t> && rows_,
-        const ScanContextPtr & scan_context_)
+        std::vector<size_t> && rows_)
     {
         return std::make_shared<ConcatSkippableBlockInputStream<need_row_id>>(
             std::move(inputs_),
-            std::move(rows_),
-            scan_context_);
+            std::move(rows_));
     }
 
     ConcatSkippableBlockInputStream(
         SkippableBlockInputStreams && inputs_,
-        std::vector<size_t> && rows_,
-        const ScanContextPtr & scan_context_);
+        std::vector<size_t> && rows_);
 
     void appendChild(SkippableBlockInputStreamPtr child, size_t rows_);
 
@@ -66,8 +62,6 @@ private:
     BlockInputStreams::iterator current_stream;
     std::vector<size_t> rows;
     size_t precede_stream_rows;
-    const ScanContextPtr scan_context;
-    LACBytesCollector lac_bytes_collector;
 };
 
 } // namespace DB::DM

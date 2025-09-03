@@ -135,8 +135,7 @@ try
         })});
         return ConcatSkippableBlockInputStream<false>::create(
             {NopSkippableBlockInputStream::wrap(block1), NopSkippableBlockInputStream::wrap(block2)},
-            {7, 4},
-            nullptr);
+            {7, 4});
     };
 
     // VectorIndexInputStream does not need this information, but ctx needs at least a correct vec column.
