@@ -57,12 +57,12 @@ void ColumnFileInMemory::fillColumns(const ColumnDefines & col_defs, size_t col_
 }
 
 ColumnFileReaderPtr ColumnFileInMemory::getReader(
-    const DMContext &,
+    const DMContext & dm_context,
     const IColumnFileDataProviderPtr &,
     const ColumnDefinesPtr & col_defs,
-    ReadTag) const
+    ReadTag read_tag) const
 {
-    return std::make_shared<ColumnFileInMemoryReader>(*this, col_defs);
+    return std::make_shared<ColumnFileInMemoryReader>(*this, col_defs, dm_context.scan_context, read_tag);
 }
 
 void ColumnFileInMemory::disableAppend()
@@ -130,7 +130,10 @@ std::pair<size_t, size_t> ColumnFileInMemoryReader::readRows(
     size_t rows_limit,
     const RowKeyRange * range)
 {
+    auto initial_bytes = columnsBytes(cols_data_cache);
     memory_file.fillColumns(*col_defs, output_cols.size(), cols_data_cache);
+    if (auto read_bytes = columnsBytes(cols_data_cache) - initial_bytes; read_bytes > 0)
+        ScanContext::addReadBytes(scan_context, lac_bytes_collector, read_bytes, read_tag);
 
     auto & pk_col = cols_data_cache[0];
     return copyColumnsData(cols_data_cache, pk_col, output_cols, rows_offset, rows_limit, range);
@@ -143,6 +146,7 @@ Block ColumnFileInMemoryReader::readNextBlock()
 
     Columns columns;
     memory_file.fillColumns(*col_defs, col_defs->size(), columns);
+    ScanContext::addReadBytes(scan_context, lac_bytes_collector, columnsBytes(columns), read_tag);
 
     read_done = true;
 
@@ -159,10 +163,15 @@ size_t ColumnFileInMemoryReader::skipNextBlock()
     return memory_file.getRows();
 }
 
-ColumnFileReaderPtr ColumnFileInMemoryReader::createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag)
+ColumnFileReaderPtr ColumnFileInMemoryReader::createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag read_tag_)
 {
     // Reuse the cache data.
-    return std::make_shared<ColumnFileInMemoryReader>(memory_file, new_col_defs, cols_data_cache);
+    return std::make_shared<ColumnFileInMemoryReader>(
+        memory_file,
+        new_col_defs,
+        cols_data_cache,
+        scan_context,
+        read_tag_);
 }
 
 } // namespace DB::DM

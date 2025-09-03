@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <Flash/ResourceControl/LocalAdmissionController.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFile.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileSchema.h>
 #include <Storages/DeltaMerge/Remote/Serializer_fwd.h>
+#include <Storages/DeltaMerge/ScanContext.h>
 
 namespace DB::DM
 {
@@ -91,10 +93,10 @@ public:
     ColumnFileInMemoryPtr clone() { return std::make_shared<ColumnFileInMemory>(*this); }
 
     ColumnFileReaderPtr getReader(
-        const DMContext & context,
+        const DMContext & dm_context,
         const IColumnFileDataProviderPtr & data_provider,
         const ColumnDefinesPtr & col_defs,
-        ReadTag) const override;
+        ReadTag read_tag) const override;
 
     bool isAppendable() const override { return !disable_append; }
     void disableAppend() override;
@@ -131,19 +133,35 @@ private:
     Columns cols_data_cache;
     bool read_done = false;
 
+    ScanContextPtr scan_context;
+    ReadTag read_tag;
+    std::optional<LACBytesCollector> lac_bytes_collector;
+
 public:
     ColumnFileInMemoryReader(
         const ColumnFileInMemory & memory_file_,
         const ColumnDefinesPtr & col_defs_,
-        const Columns & cols_data_cache_)
+        const Columns & cols_data_cache_,
+        const ScanContextPtr & scan_context_,
+        ReadTag read_tag_)
         : memory_file(memory_file_)
         , col_defs(col_defs_)
         , cols_data_cache(cols_data_cache_)
+        , scan_context(scan_context_)
+        , read_tag(read_tag_)
+        , lac_bytes_collector(scan_context ? scan_context->newLACBytesCollector(read_tag) : std::nullopt)
     {}
 
-    ColumnFileInMemoryReader(const ColumnFileInMemory & memory_file_, const ColumnDefinesPtr & col_defs_)
+    ColumnFileInMemoryReader(
+        const ColumnFileInMemory & memory_file_,
+        const ColumnDefinesPtr & col_defs_,
+        const ScanContextPtr & scan_context_,
+        ReadTag read_tag_)
         : memory_file(memory_file_)
         , col_defs(col_defs_)
+        , scan_context(scan_context_)
+        , read_tag(read_tag_)
+        , lac_bytes_collector(scan_context ? scan_context->newLACBytesCollector(read_tag) : std::nullopt)
     {}
 
     /// This is a ugly hack to fast return PK & Version column.
@@ -159,7 +177,7 @@ public:
 
     size_t skipNextBlock() override;
 
-    ColumnFileReaderPtr createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag) override;
+    ColumnFileReaderPtr createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag read_tag_) override;
 };
 
 } // namespace DB::DM

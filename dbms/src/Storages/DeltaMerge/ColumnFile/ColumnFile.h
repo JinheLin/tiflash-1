@@ -182,6 +182,14 @@ public:
         size_t rows_offset,
         size_t rows_limit,
         const RowKeyRange * range);
+
+    static size_t columnsBytes(const Columns & columns)
+    {
+        size_t bytes = 0;
+        for (const auto & col : columns)
+            bytes += col->byteSize();
+        return bytes;
+    }
 };
 
 } // namespace DB::DM

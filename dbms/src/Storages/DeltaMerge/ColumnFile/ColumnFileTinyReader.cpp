@@ -22,14 +22,6 @@
 namespace DB::DM
 {
 
-static size_t columnsBytes(const Columns & columns)
-{
-    size_t bytes = 0;
-    for (const auto & col : columns)
-        bytes += col->byteSize();
-    return bytes;
-}
-
 std::pair<ColumnPtr, ColumnPtr> ColumnFileTinyReader::getPKAndVersionColumns()
 {
     if (const size_t cached_columns = cols_data_cache.size(); cached_columns < 2)
@@ -144,7 +136,13 @@ size_t ColumnFileTinyReader::skipNextBlock()
 ColumnFileReaderPtr ColumnFileTinyReader::createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag read_tag_)
 {
     // Reuse the cache data.
-    return std::make_shared<ColumnFileTinyReader>(tiny_file, data_provider, new_col_defs, cols_data_cache, scan_context, read_tag_);
+    return std::make_shared<ColumnFileTinyReader>(
+        tiny_file,
+        data_provider,
+        new_col_defs,
+        cols_data_cache,
+        scan_context,
+        read_tag_);
 }
 
 } // namespace DB::DM
