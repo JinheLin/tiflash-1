@@ -45,5 +45,7 @@ enum class ReadTag
     Query, // Read columns required by queries.
     MVCC, // Read columns to build MVCC bitmap.
     LMFilter, // Read columns required by late-materialization filter.
+    DeltaIndex,  // Read columns to build delta index.
+    VersionChain, // Read columns to build version chain.
 };
 } // namespace DB::DM
