@@ -71,12 +71,12 @@ inline void integrityCheckIndexInfoV2(const dtpb::ColumnFileIndexInfo & index_in
 
 
 ColumnFileReaderPtr ColumnFileTiny::getReader(
-    const DMContext &,
+    const DMContext & dm_context,
     const IColumnFileDataProviderPtr & data_provider,
     const ColumnDefinesPtr & col_defs,
-    ReadTag) const
+    ReadTag read_tag) const
 {
-    return std::make_shared<ColumnFileTinyReader>(*this, data_provider, col_defs);
+    return std::make_shared<ColumnFileTinyReader>(*this, data_provider, col_defs, dm_context.scan_context, read_tag);
 }
 
 void ColumnFileTiny::serializeMetadata(WriteBuffer & buf, bool save_schema) const

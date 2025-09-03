@@ -24,7 +24,7 @@
 #include <pingcap/pd/Types.h>
 #include <sys/types.h>
 #include <tipb/executor.pb.h>
-
+#include <Flash/ResourceControl/LocalAdmissionController.h>
 #include <atomic>
 
 
@@ -507,6 +507,10 @@ public:
     void setStreamCost(uint64_t local_min_ns, uint64_t local_max_ns, uint64_t remote_min_ns, uint64_t remote_max_ns);
 
     static void initCurrentInstanceId(Poco::Util::AbstractConfiguration & config, const LoggerPtr & log);
+
+    void addReadBytes(size_t bytes, ReadTag read_tag);
+    std::optional<LACBytesCollector> newLACBytesCollector(ReadTag read_tag);
+    static void addReadBytes(ScanContextPtr & scan_context, std::optional<LACBytesCollector> & lac_bytes_collector, size_t bytes, ReadTag read_tag);
 
 private:
     void serializeRegionNumOfInstance(tipb::TiFlashScanContext & proto) const;

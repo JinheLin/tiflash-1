@@ -136,7 +136,7 @@ ColumnFileTinyPtr ColumnFileTinyLocalIndexWriter::buildIndexForFile(
     // Read all blocks and build index
     // TODO: read one column at a time to reduce peak memory usage.
     const size_t num_cols = read_columns->size();
-    ColumnFileTinyReader reader(*file, options.data_provider, read_columns);
+    ColumnFileTinyReader reader(*file, options.data_provider, read_columns, /*scan_context*/nullptr, ReadTag::Internal);
     while (true)
     {
         if (!should_proceed())

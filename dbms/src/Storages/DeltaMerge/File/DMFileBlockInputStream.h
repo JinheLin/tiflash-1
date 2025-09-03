@@ -26,6 +26,8 @@
 #include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/ScanContext_fwd.h>
 #include <Storages/DeltaMerge/SkippableBlockInputStream.h>
+#include <Flash/ResourceControl/LocalAdmissionController.h>
+#include <Storages/DeltaMerge/ScanContext.h>
 
 #if ENABLE_CLARA
 #include <Storages/DeltaMerge/Index/FullTextIndex/Stream/Ctx_fwd.h>
@@ -38,9 +40,12 @@ inline static constexpr size_t DMFILE_READ_ROWS_THRESHOLD = DEFAULT_MERGE_BLOCK_
 class DMFileBlockInputStream : public SkippableBlockInputStream
 {
 public:
-    explicit DMFileBlockInputStream(DMFileReader && reader_, bool enable_data_sharing_)
+    explicit DMFileBlockInputStream(DMFileReader && reader_, bool enable_data_sharing_, const ScanContextPtr & scan_context_, ReadTag read_tag_)
         : reader(std::move(reader_))
         , enable_data_sharing(enable_data_sharing_)
+        , scan_context(scan_context_)
+        , read_tag(read_tag_)
+        , lac_bytes_collector(scan_context ? scan_context->newLACBytesCollector(read_tag) : std::nullopt)
     {
         if (enable_data_sharing)
         {
@@ -64,14 +69,28 @@ public:
 
     size_t skipNextBlock() override { return reader.skipNextBlock(); }
 
-    Block read() override { return reader.read(); }
+    Block read() override 
+    { 
+        auto block = reader.read();
+        auto bytes = block.bytes();
+        ScanContext::addReadBytes(scan_context, lac_bytes_collector, bytes, read_tag);
+        return block;
+    }
 
-    Block readWithFilter(const IColumn::Filter & filter) override { return reader.readWithFilter(filter); }
+    Block readWithFilter(const IColumn::Filter & filter) override 
+    { 
+        auto block = reader.readWithFilter(filter);
+        ScanContext::addReadBytes(scan_context, lac_bytes_collector, block.bytes(), read_tag);
+        return block;
+    }
 
 private:
     friend class tests::DMFileMetaV2Test;
     DMFileReader reader;
     const bool enable_data_sharing;
+    ScanContextPtr scan_context;
+    ReadTag read_tag;
+    std::optional<LACBytesCollector> lac_bytes_collector;
 };
 
 using DMFileBlockInputStreamPtr = std::shared_ptr<DMFileBlockInputStream>;

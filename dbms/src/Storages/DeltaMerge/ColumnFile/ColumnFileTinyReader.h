@@ -16,7 +16,8 @@
 
 #include <IO/FileProvider/FileProvider_fwd.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFile.h>
-
+#include <Flash/ResourceControl/LocalAdmissionController.h>
+#include <Storages/DeltaMerge/ScanContext.h>
 #include <span>
 
 namespace DB::DM
@@ -33,25 +34,38 @@ private:
     Columns cols_data_cache;
     bool read_done = false;
 
+    ScanContextPtr scan_context;
+    ReadTag read_tag;
+    std::optional<LACBytesCollector> lac_bytes_collector;
 public:
     ColumnFileTinyReader(
         const ColumnFileTiny & tiny_file_,
         const IColumnFileDataProviderPtr & data_provider_,
         const ColumnDefinesPtr & col_defs_,
-        const Columns & cols_data_cache_)
+        const Columns & cols_data_cache_,
+        const ScanContextPtr & scan_context,
+        ReadTag read_tag)
         : tiny_file(tiny_file_)
         , data_provider(data_provider_)
         , col_defs(col_defs_)
         , cols_data_cache(cols_data_cache_)
+        , scan_context(scan_context)
+        , read_tag(read_tag)
+        , lac_bytes_collector(scan_context ? scan_context->newLACBytesCollector(read_tag) : std::nullopt)
     {}
 
     ColumnFileTinyReader(
         const ColumnFileTiny & tiny_file_,
         const IColumnFileDataProviderPtr & data_provider_,
-        const ColumnDefinesPtr & col_defs_)
+        const ColumnDefinesPtr & col_defs_,
+        const ScanContextPtr & scan_context,
+        ReadTag read_tag)
         : tiny_file(tiny_file_)
         , data_provider(data_provider_)
         , col_defs(col_defs_)
+        , scan_context(scan_context)
+        , read_tag(read_tag)
+        , lac_bytes_collector(scan_context ? scan_context->newLACBytesCollector(read_tag) : std::nullopt)
     {}
 
     /// This is a ugly hack to fast return PK & Version column.
@@ -65,13 +79,13 @@ public:
 
     Columns readFromDisk(
         const IColumnFileDataProviderPtr & data_provider,
-        const std::span<const ColumnDefine> & column_defines) const;
+        const std::span<const ColumnDefine> & column_defines);
 
     Block readNextBlock() override;
 
     size_t skipNextBlock() override;
 
-    ColumnFileReaderPtr createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag) override;
+    ColumnFileReaderPtr createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag read_tag_) override;
 };
 
 } // namespace DB::DM

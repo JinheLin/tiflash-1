@@ -267,4 +267,27 @@ void ScanContext::initCurrentInstanceId(Poco::Util::AbstractConfiguration & conf
     current_instance_id = getCurrentInstanceId(flash_server_addr, log);
     LOG_INFO(log, "flash_server_addr={}, current_instance_id={}", flash_server_addr, current_instance_id);
 }
+
+void ScanContext::addReadBytes(size_t bytes, ReadTag /*read_tag*/)
+{
+    user_read_bytes += bytes;
+    // TODO: metrics by read_tag
+}
+
+// LACBytesCollector is not thread-safe, so create a new one for each stream.
+std::optional<LACBytesCollector> ScanContext::newLACBytesCollector(ReadTag read_tag)
+{
+    if (!resource_group_name.empty() && (read_tag == ReadTag::LMFilter || read_tag == ReadTag::Query))
+        return LACBytesCollector(keyspace_id, resource_group_name);
+    return std::nullopt;
+}
+
+void ScanContext::addReadBytes(ScanContextPtr & scan_context, std::optional<LACBytesCollector> & lac_bytes_collector, size_t bytes, ReadTag read_tag)
+{
+    if (scan_context)
+        scan_context->addReadBytes(bytes, read_tag);
+    if (lac_bytes_collector)
+        lac_bytes_collector->collect(bytes);
+}
+
 } // namespace DB::DM

@@ -22,6 +22,14 @@
 namespace DB::DM
 {
 
+static size_t columnsBytes(const Columns & columns)
+{
+    size_t bytes = 0;
+    for (const auto & col : columns)
+        bytes += col->byteSize();
+    return bytes;
+}
+
 std::pair<ColumnPtr, ColumnPtr> ColumnFileTinyReader::getPKAndVersionColumns()
 {
     if (const size_t cached_columns = cols_data_cache.size(); cached_columns < 2)
@@ -54,7 +62,7 @@ std::pair<size_t, size_t> ColumnFileTinyReader::readRows(
 
 Columns ColumnFileTinyReader::readFromDisk(
     const IColumnFileDataProviderPtr & data_provider,
-    const std::span<const ColumnDefine> & column_defines) const
+    const std::span<const ColumnDefine> & column_defines)
 {
     const size_t num_columns_read = column_defines.size();
     Columns columns(num_columns_read); // allocate empty columns
@@ -109,7 +117,7 @@ Columns ColumnFileTinyReader::readFromDisk(
 
         columns[index] = convertColumnByColumnDefineIfNeed(type, std::move(col_data), cd);
     }
-
+    ScanContext::addReadBytes(scan_context, lac_bytes_collector, columnsBytes(columns), read_tag);
     return columns;
 }
 
@@ -133,10 +141,10 @@ size_t ColumnFileTinyReader::skipNextBlock()
     return tiny_file.getRows();
 }
 
-ColumnFileReaderPtr ColumnFileTinyReader::createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag)
+ColumnFileReaderPtr ColumnFileTinyReader::createNewReader(const ColumnDefinesPtr & new_col_defs, ReadTag read_tag_)
 {
     // Reuse the cache data.
-    return std::make_shared<ColumnFileTinyReader>(tiny_file, data_provider, new_col_defs, cols_data_cache);
+    return std::make_shared<ColumnFileTinyReader>(tiny_file, data_provider, new_col_defs, cols_data_cache, scan_context, read_tag_);
 }
 
 } // namespace DB::DM
