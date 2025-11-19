@@ -15,6 +15,7 @@ TIKV_IMAGE ?= us-docker.pkg.dev/pingcap-testing-account/hub/tikv/tikv/image:dedi
 PD_IMAGE ?= us-docker.pkg.dev/pingcap-testing-account/hub/tikv/pd/image:master-next-gen
 TIDB_IMAGE ?= us-docker.pkg.dev/pingcap-testing-account/hub/pingcap/tidb/images/tidb-server:master-next-gen
 TIFLASH_IMAGE ?= us-docker.pkg.dev/pingcap-testing-account/hub/pingcap/tiflash/image:master-next-gen
+TICDC_IMAGE ?= us-docker.pkg.dev/pingcap-testing-account/hub/pingcap/ticdc/image:master-next-gen
 
 # Set PULL to 1 to always pull the latest image
 PULL ?= 0
@@ -44,6 +45,11 @@ tiflash:
 	$(call pull_if_needed,$(TIFLASH_IMAGE))
 	$(DOCKER) run --entrypoint '/bin/sh' -it -v ./binaries/tiflash:/data/out --rm $(TIFLASH_IMAGE) -c 'cp -rv /tiflash/* /data/out/'
 
+ticdc:
+	mkdir -pv binaries/ticdc
+	$(call pull_if_needed,$(TICDC_IMAGE))
+	$(DOCKER) run --entrypoint '/bin/sh' -it -v ./binaries/ticdc:/data/out --rm $(TICDC_IMAGE) -c 'cp -v /cdc /data/out/'
+
 versions:
 	@echo "TiKV version:"
 	./binaries/tikv/tikv-server -V || echo "not found"
@@ -53,8 +59,10 @@ versions:
 	./binaries/tidb/tidb-server -V || echo "not found"
 	@echo "TiFlash version:"
 	./binaries/tiflash/tiflash version || echo "not found"
+	@echo "TiCDC version:"
+	./binaries/ticdc/cdc version || echo "not found"
 
-download: tikv pd tidb tiflash versions
+download: tikv pd tidb tiflash ticdc versions
 	
 pre_package:
 	mkdir -p ./binaries/package
@@ -66,5 +74,7 @@ package_tidb: pre_package
 	tar -czvf ./binaries/package/tidb.tar.gz -C ./binaries/tidb .
 package_tiflash: pre_package
 	tar -czvf ./binaries/package/tiflash.tar.gz -C ./binaries/ tiflash/
+package_ticdc: pre_package
+	tar -czvf ./binaries/package/ticdc.tar.gz -C ./binaries/ticdc .
 
-package: package_pd package_tidb package_tikv package_tiflash
+package: package_pd package_tidb package_tikv package_tiflash package_ticdc

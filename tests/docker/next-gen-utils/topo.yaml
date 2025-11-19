@@ -1,0 +1,139 @@
+      
+# # Global variables are applied to all deployments and as the default value of
+# # them if the specific deployment value missing.
+
+global:
+  user: "jaysonhuang"
+  ssh_port: 22
+  deploy_dir: "/DATA/disk3/jaysonhuang/clusters"
+  #data_dir: "/DATA/disk1/jaysonhuang/clusters"
+
+# # Monitored variables are used to all the machine
+monitored:
+  node_exporter_port: 9780
+  blackbox_exporter_port: 9880
+
+server_configs:
+  tidb:
+    log.slow-threshold: 300
+    binlog.enable: false
+    binlog.ignore-error: false
+    performance.txn-total-size-limit: 53687091200 # 1GB
+  tikv:
+    # server.grpc-concurrency: 4
+    # rocksdb.max-sub-compactions: 1
+    # memory-usage-limit: 50GB
+    #server.snap-max-write-bytes-per-sec: 400MB
+    raftstore.capacity: 1099511627776 # 1TB
+    storage.block-cache.capacity: "8GB"
+    raftstore.apply-pool-size: 4
+    raftstore.store-pool-size: 4
+    log.file.max-backups: 30
+    storage.api-version: 2
+    storage.enable-ttl: true
+    dfs.s3-endpoint: "http://10.2.12.79:9000"
+    dfs.s3-key-id: "minioadmin"
+    dfs.s3-secret-key: "minioadmin"
+    dfs.s3-bucket: "jayson-dedicated-test"
+    dfs.s3-region: "local"
+    dfs.prefix: "tikv"
+  pd:
+    replication.max-replicas: 1
+    replication.location-labels: ["zone", "host"]
+  tiflash:
+    logger.level: "info"
+    storage.api_version: 2
+    storage.s3.endpoint: "http://10.2.12.79:9000"
+    storage.s3.access_key_id: "minioadmin"
+    storage.s3.secret_access_key: "minioadmin"
+    storage.s3.bucket: "jayson-dedicated-test"
+    storage.s3.root: "/tiflash"
+  tiflash-learner:
+    raftstore.capacity: 500GiB
+    raftstore.apply-pool-size: 4
+    raftstore.store-pool-size: 4
+    raftstore.apply-low-priority-pool-size: 4
+    server.snap-max-write-bytes-per-sec: 400MB
+    log.file.max-backups: 10
+    storage.api-version: 2
+    storage.enable-ttl: true
+    dfs.s3-endpoint: "http://10.2.12.79:9000"
+    dfs.s3-key-id: "minioadmin"
+    dfs.s3-secret-key: "minioadmin"
+    dfs.s3-bucket: "jayson-dedicated-test"
+    dfs.prefix: "tikv"
+    dfs.s3-region: "local"
+
+pd_servers:
+  - host: 10.2.12.81
+    name: "pd-1"
+    client_port: 6580
+    peer_port: 7080
+    config:
+      keyspace.pre-alloc: ["ks1"]
+
+tidb_servers:
+  - host: 10.2.12.81
+    port: 8080
+    status_port: 8580
+    config:
+      disaggregated-tiflash: true
+      keyspace-name: "SYSTEM"
+      tidb-service-scope: "dxf_service"
+  - host: 10.2.12.81
+    port: 8081
+    status_port: 8581
+    config:
+      disaggregated-tiflash: true
+      keyspace-name: "ks1"
+      tidb-service-scope: "dxf_service"
+
+tikv_servers:
+  - host: 10.2.12.81
+    port: 7580
+    status_port: 16580
+    config:
+      server.labels:
+        host: tidb-host-machine-1
+
+tiflash_servers:
+  - host: 10.2.12.81
+    tcp_port: 5081
+    http_port: 4581
+    flash_service_port: 9581
+    flash_proxy_port: 9081
+    flash_proxy_status_port: 20081
+    metrics_port: 20581
+    config:
+      #storage.io_rate_limit.max_bytes_per_sec: 209715200 # 200MB/s
+      tcp_port: 5081
+      storage.main.dir :   [ /DATA/disk3/jaysonhuang/clusters/tiflash-5081/data ]
+      storage.main.capacity:   [ 536870912000 ]
+      flash.disaggregated_mode:  "tiflash_write"
+  - host: 10.2.12.81
+    tcp_port: 5085
+    http_port: 4585
+    flash_service_port: 9585
+    flash_proxy_port: 9085
+    flash_proxy_status_port: 20085
+    metrics_port: 20585
+    config:
+      tcp_port: 5085
+      storage.main.dir :   [ /DATA/disk3/jaysonhuang/clusters/tiflash-5085/data ]
+      storage.main.capacity:   [ 536870912000 ]
+      flash.disaggregated_mode:  "tiflash_compute"
+      storage.remote.cache.dir: /DATA/disk3/jaysonhuang/clusters/tiflash-5085/data/cache
+      storage.remote.cache.capacity: 536870912000
+
+monitoring_servers:
+  - host: 10.2.12.81
+    port: 21080
+    ng_port: 23080
+
+grafana_servers:
+  - host: 10.2.12.81
+    port: 21580
+    anonymous_enable: true
+
+
+    
