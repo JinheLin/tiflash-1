@@ -24,10 +24,13 @@ std::tuple<uint64_t *, uint64_t *> getAllocDeallocPtr();
 
 struct ProcessMemoryUsage
 {
-    UInt64 resident_bytes;
+    UInt64 resident_bytes; // Raw VmRSS in bytes.
+    UInt64 rss_file_bytes;
+    UInt64 memory_control_rss_bytes;
     UInt64 cur_virt_bytes;
     Int64 cur_proc_num_threads;
+    bool valid_rss_file; // Whether rss_file_bytes was sampled from process metrics.
 };
-ProcessMemoryUsage get_process_mem_usage();
+ProcessMemoryUsage get_process_mem_usage(bool exclude_rss_file_from_memory_control = false);
 
 } // namespace DB

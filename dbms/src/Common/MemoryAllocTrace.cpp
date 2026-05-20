@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <Common/MemoryAllocTrace.h>
+#include <ProcessMetrics/ProcessMetrics.h>
 #include <common/config_common.h> // Included for `USE_JEMALLOC`
 
 #include <fstream>
@@ -68,17 +69,34 @@ bool process_mem_usage(double & resident_set, Int64 & cur_proc_num_threads, UInt
     return true;
 }
 
-ProcessMemoryUsage get_process_mem_usage()
+ProcessMemoryUsage get_process_mem_usage(bool exclude_rss_file_from_memory_control)
 {
-    double resident_set;
+    double stat_resident_set = 0;
     Int64 cur_proc_num_threads = 1;
     UInt64 cur_virt_size = 0;
-    process_mem_usage(resident_set, cur_proc_num_threads, cur_virt_size);
-    resident_set *= 1024; // transfrom from KB to bytes
+    const bool stat_ok = process_mem_usage(stat_resident_set, cur_proc_num_threads, cur_virt_size);
+
+    auto metrics = get_process_metrics();
+    UInt64 raw_rss = metrics.rss;
+    UInt64 rss_file = metrics.rss_file;
+    const bool valid_rss_file = raw_rss > 0 || rss_file > 0;
+
+    if (!valid_rss_file && stat_ok)
+    {
+        raw_rss = static_cast<UInt64>(stat_resident_set * 1024);
+        rss_file = 0;
+    }
+
+    const UInt64 memory_control_rss
+        = exclude_rss_file_from_memory_control ? (raw_rss > rss_file ? raw_rss - rss_file : 0) : raw_rss;
+
     return ProcessMemoryUsage{
-        static_cast<size_t>(resident_set),
+        raw_rss,
+        rss_file,
+        memory_control_rss,
         cur_virt_size,
         cur_proc_num_threads,
+        valid_rss_file,
     };
 }
 
