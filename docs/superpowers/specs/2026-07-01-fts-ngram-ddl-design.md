@@ -1,197 +1,201 @@
-# FTS Ngram DDL Path Design
+# FTS Ngram DDL 路径设计
 
-## Scope
+## 范围
 
-This document describes phase one of Columnar FTS Ngram support: the DDL metadata path.
+本文描述 Columnar FTS 支持 Ngram 的第一阶段：DDL 元数据链路。
 
-The goal is to pass `NGRAM_V1`, `min_gram`, and `max_gram` from TiDB schema metadata to Cloud Storage Engine (CSE), and to keep TiFlash schema parsing compatible with that metadata.
+本阶段目标是把 `NGRAM_V1`、`min_gram` 和 `max_gram` 从 TiDB schema 元数据传递到 Cloud Storage Engine（CSE），并保证 TiFlash 能兼容解析这些 schema 元数据。
 
-This phase does not implement Ngram tokenization for writes, Ngram query semantics, post-filtering, or score changes.
+本阶段不实现 Ngram 写入分词、Ngram 查询语义、误召回后置过滤，也不调整 score 语义。
 
-## Decisions
+## 设计决策
 
-- SQL syntax supports explicit Ngram parameters:
-  `WITH PARSER ngram (MIN_GRAM = 2, MAX_GRAM = 3)`.
-- `NGRAM_V1` is always case-insensitive. There is no DDL parameter for case sensitivity.
-- `MIN_GRAM` and `MAX_GRAM` are required for `NGRAM_V1`.
-- `STANDARD_V1` and `MULTILINGUAL_V1` must not carry gram parameters.
-- `max_gram` upper bound is `8` for phase one.
-- Missing gram fields remain valid for old `STANDARD_V1` and `MULTILINGUAL_V1` metadata.
-- TiFlash does not use DeltaMerge FTS for this flow. Writes go to CSE, and reads go through `StorageDisaggregated::readThroughColumnar`.
-- TiFlash should only parse and round-trip schema JSON for Ngram metadata. It should not modify `dbms/src/Storages/DeltaMerge/Index/FullTextIndex/*`.
-- Do not register a fake Tantivy tokenizer for `NGRAM_V1` that silently builds non-Ngram indexes. If a write path reaches `NGRAM_V1` before phase two, it should fail fast rather than build an index with incorrect semantics.
+- SQL 语法支持显式 Ngram 参数：`WITH PARSER ngram (MIN_GRAM = 2, MAX_GRAM = 3)`。
+- `NGRAM_V1` 固定为大小写不敏感语义，不提供大小写敏感相关的 DDL 参数。
+- `NGRAM_V1` 必须显式指定 `MIN_GRAM` 和 `MAX_GRAM`。
+- `STANDARD_V1` 和 `MULTILINGUAL_V1` 不允许携带 gram 参数。
+- 第一版 `max_gram` 上限设为 `8`。
+- 旧表中的 `STANDARD_V1` 和 `MULTILINGUAL_V1` 缺少 gram 字段时仍然合法。
+- TiFlash 不通过 DeltaMerge FTS 执行这个链路。写请求走 CSE，读请求走 `StorageDisaggregated::readThroughColumnar`。
+- TiFlash 只需要解析并回写 Ngram schema JSON，不修改 `dbms/src/Storages/DeltaMerge/Index/FullTextIndex/*`。
+- 不注册会静默构建错误索引的假 `NGRAM_V1` Tantivy tokenizer。如果写路径在第二阶段前遇到 `NGRAM_V1`，应快速失败，而不是用错误语义建索引。
 
-## TiDB CSE Changes
+## TiDB CSE 修改
 
-Repository: `/DATA/disk1/jinhelin/tidb-cse`
+仓库：`/DATA/disk1/jinhelin/tidb-cse`
 
-### Parser Model
+### Parser 模型
 
-Update `pkg/parser/model/index_full_text.go`:
+修改 `pkg/parser/model/index_full_text.go`：
 
-- Add `FullTextParserTypeNgramV1 = "NGRAM_V1"`.
-- Return `NGRAM` from `FullTextParserType.SQLName()`.
-- Return `FullTextParserTypeNgramV1` from `GetFullTextParserTypeBySQLName("ngram")`.
-- Extend `FullTextIndexInfo`:
+- 新增 `FullTextParserTypeNgramV1 = "NGRAM_V1"`。
+- `FullTextParserType.SQLName()` 对 `NGRAM_V1` 返回 `NGRAM`。
+- `GetFullTextParserTypeBySQLName("ngram")` 返回 `FullTextParserTypeNgramV1`。
+- 扩展 `FullTextIndexInfo`：
   - `MinGram *uint64 json:"min_gram,omitempty"`
   - `MaxGram *uint64 json:"max_gram,omitempty"`
 
-Pointer fields preserve presence: old schemas decode as nil, while valid Ngram schemas must have non-nil values.
+这里使用指针字段保留字段是否存在的语义：旧 schema 反序列化后为 `nil`；合法的 Ngram schema 必须为非 `nil`。
 
-### AST And Grammar
+### AST 与语法
 
-Update `pkg/parser/ast/ddl.go` and `pkg/parser/parser.y`:
+修改 `pkg/parser/ast/ddl.go` 和 `pkg/parser/parser.y`：
 
-- Add a small parser-parameter structure to `ast.IndexOption`, carrying fulltext parser options.
-- Extend grammar from `WITH PARSER Identifier` to also accept an optional parenthesized parameter list.
-- Parse parameter names as identifiers, case-insensitively. Do not add new reserved keywords for `MIN_GRAM` or `MAX_GRAM`.
-- Support parameters in any order.
-- Reject duplicate parameters during DDL validation.
-- Restore Ngram parser options in canonical order:
-  `WITH PARSER ngram (MIN_GRAM = 2, MAX_GRAM = 3)`.
-- Keep existing restore output unchanged for `STANDARD` and `MULTILINGUAL`.
+- 在 `ast.IndexOption` 中增加一个小型 parser 参数结构，用于承载 fulltext parser 参数。
+- 将现有 `WITH PARSER Identifier` grammar 扩展为支持可选括号参数列表。
+- 参数名按 identifier 解析，并做大小写不敏感匹配。不要为 `MIN_GRAM` 或 `MAX_GRAM` 新增保留关键字。
+- 支持参数任意顺序。
+- DDL 校验阶段拒绝重复参数。
+- AST 还原对 Ngram 参数使用固定顺序输出：`WITH PARSER ngram (MIN_GRAM = 2, MAX_GRAM = 3)`。
+- `STANDARD` 和 `MULTILINGUAL` 的还原输出保持现有格式，不带括号参数。
 
-After modifying `parser.y`, regenerate parser output through the repository parser generation flow.
+修改 `parser.y` 后，需要按 TiDB CSE 现有 parser 生成流程重新生成 parser 代码。
 
-### DDL Validation
+### DDL 校验
 
-Update `pkg/planner/core/preprocess.go` and `pkg/ddl/index.go`:
+修改 `pkg/planner/core/preprocess.go` 和 `pkg/ddl/index.go`：
 
-- Accept `NGRAM` as a supported fulltext parser.
-- In `buildFullTextInfoWithCheck`:
-  - Validate fulltext index shape exactly as today: one string column, no expression, no prefix length, no descending order, no duplicate fulltext index on the same column.
-  - For `NGRAM_V1`, require both `MIN_GRAM` and `MAX_GRAM`.
-  - Require `min_gram >= 1`.
-  - Require `max_gram >= min_gram`.
-  - Require `max_gram <= 8`.
-  - Reject unknown fulltext parser parameters.
-  - Reject gram parameters for `STANDARD_V1` and `MULTILINGUAL_V1`.
-  - Store `ParserType`, `MinGram`, and `MaxGram` in `FullTextIndexInfo`.
+- fulltext parser 名称校验接受 `NGRAM`。
+- `buildFullTextInfoWithCheck` 保留现有 fulltext index 形态校验：
+  - 只支持 1 个字符串列。
+  - 不支持表达式。
+  - 不支持 prefix length。
+  - 不支持 DESC。
+  - 同一列不允许重复创建 fulltext index。
+- 对 `NGRAM_V1` 增加参数校验：
+  - 必须同时指定 `MIN_GRAM` 和 `MAX_GRAM`。
+  - `min_gram >= 1`。
+  - `max_gram >= min_gram`。
+  - `max_gram <= 8`。
+  - 拒绝未知 fulltext parser 参数。
+- 对 `STANDARD_V1` 和 `MULTILINGUAL_V1`：
+  - 如果带 gram 参数，直接报错。
+- 校验通过后，把 `ParserType`、`MinGram` 和 `MaxGram` 写入 `FullTextIndexInfo`。
 
-### SHOW CREATE TABLE
+### `SHOW CREATE TABLE`
 
-Update `pkg/executor/show.go`:
+修改 `pkg/executor/show.go`：
 
-- For `NGRAM_V1`, append `WITH PARSER NGRAM (MIN_GRAM = <min>, MAX_GRAM = <max>)`.
-- For non-Ngram fulltext indexes, keep the existing `WITH PARSER STANDARD` and `WITH PARSER MULTILINGUAL` output.
-- Do not output gram fields for old metadata that does not carry them.
+- 对 `NGRAM_V1` 输出 `WITH PARSER NGRAM (MIN_GRAM = <min>, MAX_GRAM = <max>)`。
+- 对非 Ngram fulltext index 保持现有输出，例如 `WITH PARSER STANDARD` 或 `WITH PARSER MULTILINGUAL`。
+- 对旧 metadata 不输出 gram 字段。
 
-## Cloud Storage Engine Changes
+## Cloud Storage Engine 修改
 
-Repository: `/DATA/disk1/jinhelin/cloud-storage-engine`
+仓库：`/DATA/disk1/jinhelin/cloud-storage-engine`
 
-### TiDB Schema Deserialization
+### TiDB Schema 反序列化
 
-Update `components/schema/src/schema.rs`:
+修改 `components/schema/src/schema.rs`：
 
-- Extend `FullTextIndexInfo`:
+- 扩展 `FullTextIndexInfo`：
   - `pub min_gram: Option<u32>`
   - `pub max_gram: Option<u32>`
 
-Serde default behavior keeps old TiDB schema JSON compatible: missing fields decode to `None`.
+Serde 默认行为可以保持旧 TiDB schema JSON 兼容：缺少字段时反序列化为 `None`。
 
-### Protobuf Metadata
+### Protobuf 元数据
 
-Update `components/kvenginepb/src/fts.proto`:
+修改 `components/kvenginepb/src/fts.proto`：
 
-- Extend `FullTextIndexDef`:
+- 扩展 `FullTextIndexDef`：
   - `uint32 min_gram = 11;`
   - `uint32 max_gram = 12;`
 
-Proto3 primitive fields use `0` as unset. This is safe because valid Ngram DDL requires `min_gram >= 1`.
+Proto3 primitive 字段使用 `0` 表示未设置。这个约定安全，因为合法 Ngram DDL 要求 `min_gram >= 1`。
 
-Regenerate protobuf Rust files through the kvenginepb build flow. Do not edit generated files by hand.
+修改 proto 后，通过 `kvenginepb` 的构建流程重新生成 Rust 代码。不要手动编辑生成文件。
 
-### Schema Manager
+### Schema 管理器
 
-Update `components/cloud_worker/src/schema_manager.rs`:
+修改 `components/cloud_worker/src/schema_manager.rs`：
 
-- In `parse_fulltext_indexes`, copy gram fields from TiDB schema metadata to `kvenginepb::fts::FullTextIndexDef`.
-- Use `0` for missing gram fields.
-- Validate defensively:
-  - `NGRAM_V1` requires non-zero `min_gram` and `max_gram`.
-  - Non-Ngram parsers must not carry non-zero gram fields.
+- 在 `parse_fulltext_indexes` 中，把 TiDB schema metadata 里的 gram 字段复制到 `kvenginepb::fts::FullTextIndexDef`。
+- 缺失 gram 字段时写入 `0`。
+- 增加防御性校验：
+  - `NGRAM_V1` 要求 `min_gram` 和 `max_gram` 都非 `0`。
+  - 非 Ngram parser 不允许携带非 `0` 的 gram 字段。
 
-### CSE Runtime Boundary
+### CSE 运行时边界
 
-Existing schema file and shard metadata paths clone and serialize `FullTextIndexDef`, so the new fields should naturally persist once protobuf is regenerated.
+现有 schema file 和 shard metadata 路径会复制并序列化 `FullTextIndexDef`。proto 重新生成后，新字段应自然完成持久化和恢复。
 
-Do not implement Ngram writer/query behavior in this phase. In particular, do not register a placeholder `NGRAM_V1` tokenizer that maps to `STANDARD_V1` or fixed `2..3` behavior. Phase two will introduce a real tokenizer configuration abstraction and canonical tokenizer names.
+本阶段不实现 Ngram 写入或查询行为。特别是不要注册把 `NGRAM_V1` 映射到 `STANDARD_V1` 或固定 `2..3` 参数的占位 tokenizer。第二阶段会引入真正的 tokenizer 配置抽象和 canonical tokenizer name。
 
-## TiFlash Changes
+## TiFlash 修改
 
-Repository: `/DATA/disk1/jinhelin/tiflash-1`
+仓库：`/DATA/disk1/jinhelin/tiflash-1`
 
-### Schema JSON
+### Schema JSON 解析
 
-Update `dbms/src/TiDB/Schema/FullTextIndex.h`:
+修改 `dbms/src/TiDB/Schema/FullTextIndex.h`：
 
-- Extend `TiDB::FullTextIndexDefinition`:
+- 扩展 `TiDB::FullTextIndexDefinition`：
   - `std::optional<UInt32> min_gram`
   - `std::optional<UInt32> max_gram`
-- Update formatter output to include gram fields for Ngram definitions.
+- 更新 formatter 输出，让 Ngram 定义在日志和调试信息中包含 gram 字段。
 
-Update `dbms/src/TiDB/Schema/TiDB.cpp`:
+修改 `dbms/src/TiDB/Schema/TiDB.cpp`：
 
-- Parse `parser_type`, `min_gram`, and `max_gram` from `full_text_index` JSON.
-- Use a TiFlash schema-layer parser whitelist:
+- 从 `full_text_index` JSON 中解析 `parser_type`、`min_gram` 和 `max_gram`。
+- 使用 TiFlash schema 层自己的 parser 白名单：
   - `STANDARD_V1`
   - `MULTILINGUAL_V1`
   - `NGRAM_V1`
-- Do not depend on `ClaraFTS::supports_tokenizer` for this schema-level check.
-- For `NGRAM_V1`, require and validate `min_gram/max_gram` with the same rules as TiDB CSE.
-- For non-Ngram parsers, reject gram fields.
-- Serialize `min_gram/max_gram` only for `NGRAM_V1`.
+- schema 层校验不要依赖 `ClaraFTS::supports_tokenizer`。
+- 对 `NGRAM_V1`，要求并校验 `min_gram/max_gram`，规则与 TiDB CSE 保持一致。
+- 对非 Ngram parser，拒绝 gram 字段。
+- 只有 `NGRAM_V1` 序列化时写回 `min_gram/max_gram`。
 
-### Disaggregated Read Path
+### Disaggregated 读路径
 
-No change is required in `StorageDisaggregated.cpp` for phase one.
+本阶段不需要修改 `StorageDisaggregated.cpp`。
 
-`StorageDisaggregated::buildTableScanTiPB()` already forwards the TiDB table scan protobuf. `TiDBTableScan.cpp` extracts `FTSQueryInfo` from `used_columnar_indexes` for columnar fulltext reads. Ngram query semantics are phase three work.
+`StorageDisaggregated::buildTableScanTiPB()` 已经直接转发 TiDB 下发的 table scan protobuf。`TiDBTableScan.cpp` 会从 `used_columnar_indexes` 中提取 `TypeFulltext` 的 `FTSQueryInfo`。Ngram 查询语义属于第三阶段。
 
 ### DeltaMerge FTS
 
-Do not modify:
+不要修改：
 
 - `dbms/src/Storages/DeltaMerge/Index/FullTextIndex/*`
 - `FullTextIndexWriterInMemory`
 - `FullTextIndexWriterOnDisk`
-- DeltaMerge FTS reader/query code
+- DeltaMerge FTS reader/query 代码
 
-That path is deprecated for this feature. Touching it in phase one would add risk without serving the DDL metadata goal.
+这条路径对当前功能已经废弃。第一阶段修改它只会增加风险，不能帮助完成 DDL 元数据链路。
 
-### Vendored CSE Note
+### 内置 CSE 说明
 
-TiFlash also contains `contrib/cloud-storage-engine`, which is currently at a different commit from `/DATA/disk1/jinhelin/cloud-storage-engine`.
+TiFlash 仓库中还有 `contrib/cloud-storage-engine`，它当前与 `/DATA/disk1/jinhelin/cloud-storage-engine` 不在同一个 commit。
 
-Treat `/DATA/disk1/jinhelin/cloud-storage-engine` as the source of truth for CSE changes. Do not modify TiFlash's vendored CSE tree unless the TiFlash build in this workspace uses it for compilation. If the TiFlash build does use the vendored tree, mirror only the metadata-schema changes required for compilation and keep behavior changes out of the vendored tree in this phase.
+以 `/DATA/disk1/jinhelin/cloud-storage-engine` 作为 CSE 修改的唯一来源。除非当前 TiFlash workspace 编译时使用 vendored CSE，否则不要修改 TiFlash 的 vendored CSE 目录。如果 TiFlash 编译确实依赖 vendored CSE，则只同步编译所需的 metadata schema 修改，不在 vendored 目录引入行为变化。
 
-## Compatibility
+## 兼容性
 
-- Old fulltext metadata with only `parser_type` remains valid.
-- Old `STANDARD_V1` and `MULTILINGUAL_V1` metadata does not gain implicit gram defaults.
-- Ngram metadata without both gram fields is invalid.
-- Non-Ngram metadata with gram fields is invalid.
-- CSE proto readers can load old files; missing proto fields decode to `0`.
+- 旧 fulltext metadata 只有 `parser_type` 时仍然合法。
+- 旧 `STANDARD_V1` 和 `MULTILINGUAL_V1` metadata 不会获得隐式 gram 默认值。
+- `NGRAM_V1` metadata 缺少任意 gram 字段时非法。
+- 非 Ngram metadata 携带 gram 字段时非法。
+- CSE proto reader 可以加载旧文件；缺失 proto 字段会反序列化为 `0`。
 
-## Out Of Scope
+## 不在本阶段处理
 
-- Ngram analyzer implementation.
-- Canonical tokenizer names such as `NGRAM_V1_2_3_CI`.
-- Delta cache and stable FTS writer changes.
-- FTS reader/query changes.
-- `fts_match_word_ngram`.
-- tipb scalar enum changes.
-- Post-filtering for false positives.
-- Score semantics.
-- Monitoring or dashboard changes.
+- Ngram analyzer 实现。
+- `NGRAM_V1_2_3_CI` 这类 canonical tokenizer name。
+- Delta cache 和 stable FTS writer 修改。
+- FTS reader/query 修改。
+- `fts_match_word_ngram`。
+- tipb scalar enum 修改。
+- false positive 后置过滤。
+- score 语义。
+- 监控和 dashboard 修改。
 
-## Verification
+## 验证
 
-Phase one verification should focus on formatting and compile/check commands, not full unit test suites.
+第一阶段验证重点是格式化和编译检查，不要求跑完整单元测试套件。
 
-- In `/DATA/disk1/jinhelin/tiflash-1`, run `time (make format && make check)`.
-- In CSE, run formatting and compile/check commands required by the touched Rust/protobuf files, including kvenginepb generation.
-- In TiDB CSE, run parser generation and formatting/check commands required by parser and DDL metadata changes.
+- 在 `/DATA/disk1/jinhelin/tiflash-1` 运行 `time (make format && make check)`。
+- 在 CSE 中运行触及 Rust/protobuf 文件所需的格式化、编译和 `kvenginepb` 生成检查。
+- 在 TiDB CSE 中运行 parser 生成、格式化和 parser/DDL metadata 相关检查。
 
-No full unit test suite is required for this phase. Focused parser restore or schema round-trip tests are optional implementation aids, not completion criteria.
+本阶段不要求运行完整单元测试。可以按实现风险补充 parser restore 或 schema round-trip 这类聚焦测试，但它们不是完成条件。
