@@ -18,6 +18,7 @@
 #include <fmt/format.h>
 
 #include <memory>
+#include <optional>
 
 namespace TiDB
 {
@@ -27,6 +28,8 @@ namespace TiDB
 struct FullTextIndexDefinition
 {
     String parser_type = "INVALID";
+    std::optional<UInt64> min_gram;
+    std::optional<UInt64> max_gram;
 };
 
 // As this is constructed from TiDB's table definition, we should not
@@ -43,6 +46,15 @@ struct fmt::formatter<TiDB::FullTextIndexDefinition>
     template <typename FormatContext>
     auto format(const TiDB::FullTextIndexDefinition & vi, FormatContext & ctx) const -> decltype(ctx.out())
     {
+        if (vi.parser_type == "NGRAM_V1" && vi.min_gram && vi.max_gram)
+        {
+            return fmt::format_to(
+                ctx.out(), //
+                "PARSER_{}_MIN_{}_MAX_{}",
+                vi.parser_type,
+                *vi.min_gram,
+                *vi.max_gram);
+        }
         return fmt::format_to(
             ctx.out(), //
             "PARSER_{}",

@@ -43,10 +43,6 @@
 #include <magic_enum.hpp>
 #include <string>
 
-#if ENABLE_CLARA
-#include <clara_fts/src/tokenizer/mod.rs.h>
-#endif
-
 namespace DB
 {
 namespace ErrorCodes
@@ -116,6 +112,40 @@ using DB::Exception;
 using DB::Field;
 using DB::SchemaNameMapper;
 
+#if ENABLE_CLARA
+namespace
+{
+
+constexpr UInt64 MAX_FULLTEXT_NGRAM_GRAM = 8;
+
+bool isSupportedFullTextParserType(const String & parser_type)
+{
+    return parser_type == "STANDARD_V1" || parser_type == "MULTILINGUAL_V1" || parser_type == "NGRAM_V1";
+}
+
+bool isNgramFullTextParserType(const String & parser_type)
+{
+    return parser_type == "NGRAM_V1";
+}
+
+void validateNgramFullTextParser(UInt64 min_gram, UInt64 max_gram)
+{
+    RUNTIME_CHECK_MSG(min_gram >= 1, "Invalid FullTextIndex definition, min_gram must be >= 1");
+    RUNTIME_CHECK_MSG(
+        max_gram >= min_gram,
+        "Invalid FullTextIndex definition, max_gram {} must be >= min_gram {}",
+        max_gram,
+        min_gram);
+    RUNTIME_CHECK_MSG(
+        max_gram <= MAX_FULLTEXT_NGRAM_GRAM,
+        "Invalid FullTextIndex definition, max_gram {} must be <= {}",
+        max_gram,
+        MAX_FULLTEXT_NGRAM_GRAM);
+}
+
+} // namespace
+#endif
+
 // The IndexType defined in TiDB
 // https://github.com/pingcap/tidb/blob/84492a9a1e5bff0b4a4256955ab8231975c2dde1/pkg/parser/ast/model.go#L217-L226
 enum class IndexType
@@ -141,8 +171,30 @@ FullTextIndexDefinitionPtr parseFullTextIndexFromJSON(const Poco::JSON::Object::
     RUNTIME_CHECK_MSG(json->has("parser_type"), "Invalid FullTextIndex definition, missing parser_type");
     auto parser_type_field = json->getValue<String>("parser_type");
     RUNTIME_CHECK_MSG(
-        ClaraFTS::supports_tokenizer(parser_type_field),
+        isSupportedFullTextParserType(parser_type_field),
         "Invalid FullTextIndex definition, unsupported parser_type `{}`",
+        parser_type_field);
+
+    const bool has_min_gram = json->has("min_gram");
+    const bool has_max_gram = json->has("max_gram");
+    if (isNgramFullTextParserType(parser_type_field))
+    {
+        RUNTIME_CHECK_MSG(
+            has_min_gram && has_max_gram,
+            "Invalid FullTextIndex definition, NGRAM_V1 requires min_gram and max_gram");
+        auto min_gram = json->getValue<UInt64>("min_gram");
+        auto max_gram = json->getValue<UInt64>("max_gram");
+        validateNgramFullTextParser(min_gram, max_gram);
+        return std::make_shared<const FullTextIndexDefinition>(FullTextIndexDefinition{
+            .parser_type = parser_type_field,
+            .min_gram = min_gram,
+            .max_gram = max_gram,
+        });
+    }
+
+    RUNTIME_CHECK_MSG(
+        !has_min_gram && !has_max_gram,
+        "Invalid FullTextIndex definition, parser_type `{}` does not support gram parameters",
         parser_type_field);
 
     return std::make_shared<const FullTextIndexDefinition>(FullTextIndexDefinition{
@@ -153,10 +205,23 @@ FullTextIndexDefinitionPtr parseFullTextIndexFromJSON(const Poco::JSON::Object::
 Poco::JSON::Object::Ptr fullTextIndexToJSON(const FullTextIndexDefinitionPtr & full_text_index)
 {
     RUNTIME_CHECK(full_text_index != nullptr);
-    RUNTIME_CHECK(ClaraFTS::supports_tokenizer(full_text_index->parser_type));
+    RUNTIME_CHECK(isSupportedFullTextParserType(full_text_index->parser_type));
 
     Poco::JSON::Object::Ptr json = new Poco::JSON::Object();
     json->set("parser_type", full_text_index->parser_type);
+    if (isNgramFullTextParserType(full_text_index->parser_type))
+    {
+        RUNTIME_CHECK(full_text_index->min_gram.has_value());
+        RUNTIME_CHECK(full_text_index->max_gram.has_value());
+        validateNgramFullTextParser(*full_text_index->min_gram, *full_text_index->max_gram);
+        json->set("min_gram", *full_text_index->min_gram);
+        json->set("max_gram", *full_text_index->max_gram);
+    }
+    else
+    {
+        RUNTIME_CHECK(!full_text_index->min_gram.has_value());
+        RUNTIME_CHECK(!full_text_index->max_gram.has_value());
+    }
     return json;
 }
 #endif
