@@ -185,6 +185,12 @@ FullTextIndexDefinitionPtr parseFullTextIndexFromJSON(const Poco::JSON::Object::
         auto min_gram = json->getValue<UInt64>("min_gram");
         auto max_gram = json->getValue<UInt64>("max_gram");
         validateNgramFullTextParser(min_gram, max_gram);
+        LOG_INFO(
+            Logger::get("TiDBSchemaFullText"),
+            "Parsed fulltext ngram index metadata, parser_type={}, min_gram={}, max_gram={}",
+            parser_type_field,
+            min_gram,
+            max_gram);
         return std::make_shared<const FullTextIndexDefinition>(FullTextIndexDefinition{
             .parser_type = parser_type_field,
             .min_gram = min_gram,
