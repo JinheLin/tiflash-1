@@ -64,6 +64,11 @@ impl From<crate::Error> for ColumnarReaderPtr {
                 error: build_from_string(err.to_string().into_bytes()),
                 error_type: ColumnarReaderErrorType::PdClientError,
             },
+            crate::Error::HttpClientError(err) => Self {
+                inner,
+                error: build_from_string(err.to_string().into_bytes()),
+                error_type: ColumnarReaderErrorType::Other,
+            },
             crate::Error::Other(err) => Self {
                 inner,
                 error: build_from_string(err.into_bytes()),

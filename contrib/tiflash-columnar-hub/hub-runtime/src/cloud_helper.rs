@@ -57,7 +57,7 @@ use quick_cache::{
     sync::{Cache, DefaultLifecycle},
     DefaultHashBuilder,
 };
-use security::SecurityManager;
+use security::{HttpClientError as SecurityHttpClientError, HttpResult, SecurityManager};
 use thiserror::Error;
 use tikv_util::{
     config::AbsoluteOrPercentSize,
@@ -102,7 +102,7 @@ impl RefreshingHttpClient {
         }
     }
 
-    async fn request(&self, req: Request<Body>) -> Result<hyper::Response<Body>, hyper::Error> {
+    async fn request(&self, req: Request<Body>) -> HttpResult<hyper::Response<Body>> {
         let uri = req.uri().clone();
         let client = self.inner.client.lock().unwrap().clone();
         let resp = client.request(req).await;
@@ -166,6 +166,8 @@ pub enum Error {
     RegionError(kvproto::errorpb::Error),
     #[error("key is locked {0:?}")]
     KeyIsLocked(kvproto::kvrpcpb::LockInfo),
+    #[error("http client error {0}")]
+    HttpClientError(#[from] SecurityHttpClientError),
     #[error("{0}")]
     Other(String),
 }
