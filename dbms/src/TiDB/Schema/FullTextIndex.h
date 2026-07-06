@@ -30,6 +30,8 @@ struct FullTextIndexDefinition
     String parser_type = "INVALID";
     std::optional<UInt64> min_gram;
     std::optional<UInt64> max_gram;
+    std::optional<String> granularity;
+    std::optional<bool> case_insensitive;
 };
 
 // As this is constructed from TiDB's table definition, we should not
@@ -50,10 +52,12 @@ struct fmt::formatter<TiDB::FullTextIndexDefinition>
         {
             return fmt::format_to(
                 ctx.out(), //
-                "PARSER_{}_MIN_{}_MAX_{}",
+                "PARSER_{}_MIN_{}_MAX_{}_GRANULARITY_{}_CI_{}",
                 vi.parser_type,
                 *vi.min_gram,
-                *vi.max_gram);
+                *vi.max_gram,
+                vi.granularity.value_or("WORD"),
+                vi.case_insensitive.value_or(true));
         }
         return fmt::format_to(
             ctx.out(), //
