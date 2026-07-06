@@ -69,11 +69,18 @@ impl From<crate::Error> for ColumnarReaderPtr {
                 error: build_from_string(err.to_string().into_bytes()),
                 error_type: ColumnarReaderErrorType::Other,
             },
-            crate::Error::Other(err) => Self {
-                inner,
-                error: build_from_string(err.into_bytes()),
-                error_type: ColumnarReaderErrorType::Other,
-            },
+            crate::Error::Other(err) => {
+                let error_type = if err.contains("wrap_fts_pb failed:") {
+                    ColumnarReaderErrorType::InvalidRequest
+                } else {
+                    ColumnarReaderErrorType::Other
+                };
+                Self {
+                    inner,
+                    error: build_from_string(err.into_bytes()),
+                    error_type,
+                }
+            }
         }
     }
 }

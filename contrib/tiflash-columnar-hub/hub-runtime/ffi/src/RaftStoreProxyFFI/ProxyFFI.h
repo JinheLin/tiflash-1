@@ -97,6 +97,7 @@ enum class ColumnarReaderErrorType : uint8_t {
   LockedError,
   PdClientError,
   Other,
+  InvalidRequest,
 };
 
 using RawCppPtrType = uint32_t;

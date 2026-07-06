@@ -66,6 +66,7 @@ namespace DB
 {
 namespace ErrorCodes
 {
+extern const int BAD_ARGUMENTS;
 extern const int COLUMNAR_SNAPSHOT_ERROR;
 } // namespace ErrorCodes
 
@@ -856,6 +857,14 @@ ColumnarReaderPtr createColumnarReader(
             String(columnar_reader.error.buff.data, columnar_reader.error.buff.len));
         LOG_WARNING(log, "{}", error_msg);
         throw Exception(ErrorCodes::COLUMNAR_SNAPSHOT_ERROR, "{}", error_msg);
+    }
+    else if (columnar_reader.error_type == ColumnarReaderErrorType::InvalidRequest)
+    {
+        auto error_msg = fmt::format(
+            "create columnar reader failed, invalid request: {}",
+            String(columnar_reader.error.buff.data, columnar_reader.error.buff.len));
+        LOG_WARNING(log, "{}", error_msg);
+        throw Exception(ErrorCodes::BAD_ARGUMENTS, "{}", error_msg);
     }
     else if (columnar_reader.error_type != ColumnarReaderErrorType::OK)
     {

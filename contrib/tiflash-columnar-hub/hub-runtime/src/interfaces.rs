@@ -165,6 +165,7 @@ pub mod root {
             LockedError = 2,
             PdClientError = 3,
             Other = 4,
+            InvalidRequest = 5,
         }
         pub type RawCppPtrType = u32;
         pub type RawRustPtrType = u32;
