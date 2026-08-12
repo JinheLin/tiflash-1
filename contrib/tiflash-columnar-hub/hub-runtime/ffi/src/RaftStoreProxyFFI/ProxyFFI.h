@@ -211,6 +211,27 @@ struct RustStrWithViewVec {
   RawRustPtr inner;
 };
 
+struct FTSRuntimeStats {
+  uint64_t index_query_time_sum_ns;
+  uint64_t shard_count;
+  uint64_t shard_query_time_sum_ns;
+  uint64_t full_fallback_shard_count;
+  uint64_t full_fallback_query_time_sum_ns;
+  uint64_t tantivy_index_count;
+  uint64_t merge_mvcc_time_sum_ns;
+  uint64_t merge_mvcc_output_count;
+  uint64_t index_hit_count;
+  uint64_t unindexed_read_count;
+  uint64_t fallback_eval_count;
+  uint64_t fallback_processing_time_sum_ns;
+  uint64_t fallback_match_count;
+  uint64_t output_count;
+  uint64_t row_lookup_time_sum_ns;
+  uint64_t used_row_lookup;
+};
+
+static_assert(sizeof(FTSRuntimeStats) == 16 * sizeof(uint64_t));
+
 struct ColumnarScanStats {
   uint64_t mvcc_input_rows;
   uint64_t mvcc_input_bytes;
@@ -225,7 +246,10 @@ struct ColumnarScanStats {
   uint64_t rough_check_unknown_packs;
   uint64_t remote_segments;
   uint64_t total_segments;
+  FTSRuntimeStats fts;
 };
+
+static_assert(sizeof(ColumnarScanStats) == 29 * sizeof(uint64_t));
 
 struct SSTReaderInterfaces {
   SSTReaderPtr (*fn_get_sst_reader)(SSTView, RaftStoreProxyPtr);

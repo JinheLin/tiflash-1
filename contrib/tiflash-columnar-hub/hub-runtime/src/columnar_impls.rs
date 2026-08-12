@@ -21,7 +21,8 @@ use crate::{
     build_from_string, build_from_vec_string,
     interfaces_ffi::{
         BaseBuffView, ColumnarReaderErrorType, ColumnarReaderPtr, ColumnarScanStats,
-        RaftStoreProxyPtr, RawRustPtr, RawVoidPtr, RustStrWithView, RustStrWithViewVec,
+        FTSRuntimeStats, RaftStoreProxyPtr, RawRustPtr, RawVoidPtr, RustStrWithView,
+        RustStrWithViewVec,
     },
     RawRustPtrType,
 };
@@ -89,6 +90,30 @@ impl From<kvengine::table::columnar::ColumnarRuntimeStats> for ColumnarScanStats
             rough_check_unknown_packs: stats.rough_check_unknown_packs,
             remote_segments: stats.remote_segments,
             total_segments: stats.total_segments,
+            fts: FTSRuntimeStats::default(),
+        }
+    }
+}
+
+impl From<kvengine::table::fts::FtsRuntimeStats> for FTSRuntimeStats {
+    fn from(stats: kvengine::table::fts::FtsRuntimeStats) -> Self {
+        Self {
+            index_query_time_sum_ns: stats.index_query_time_sum_ns,
+            shard_count: stats.shard_count,
+            shard_query_time_sum_ns: stats.shard_query_time_sum_ns,
+            full_fallback_shard_count: stats.full_fallback_shard_count,
+            full_fallback_query_time_sum_ns: stats.full_fallback_query_time_sum_ns,
+            tantivy_index_count: stats.tantivy_index_count,
+            merge_mvcc_time_sum_ns: stats.merge_mvcc_time_sum_ns,
+            merge_mvcc_output_count: stats.merge_mvcc_output_count,
+            index_hit_count: stats.index_hit_count,
+            unindexed_read_count: stats.unindexed_read_count,
+            fallback_eval_count: stats.fallback_eval_count,
+            fallback_processing_time_sum_ns: stats.fallback_processing_time_sum_ns,
+            fallback_match_count: stats.fallback_match_count,
+            output_count: stats.output_count,
+            row_lookup_time_sum_ns: stats.row_lookup_time_sum_ns,
+            used_row_lookup: u64::from(stats.used_row_lookup),
         }
     }
 }
@@ -256,5 +281,8 @@ pub unsafe extern "C" fn ffi_physical_table_id(mut reader: ColumnarReaderPtr) ->
 pub unsafe extern "C" fn ffi_columnar_scan_stats(
     mut reader: ColumnarReaderPtr,
 ) -> ColumnarScanStats {
-    reader.as_mut().runtime_stats().into()
+    let reader = reader.as_mut();
+    let mut stats: ColumnarScanStats = reader.runtime_stats().into();
+    stats.fts = reader.fts_runtime_stats().into();
+    stats
 }

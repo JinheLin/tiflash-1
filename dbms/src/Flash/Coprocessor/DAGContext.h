@@ -34,6 +34,7 @@
 #include <DataStreams/IBlockInputStream.h>
 #include <Flash/Coprocessor/ColumnarScanContext_fwd.h>
 #include <Flash/Coprocessor/DAGRequest.h>
+#include <Flash/Coprocessor/FTSExecutionContext_fwd.h>
 #include <Flash/Coprocessor/FineGrainedShuffle.h>
 #include <Flash/Coprocessor/RuntimeFilterMgr.h>
 #include <Flash/Coprocessor/TablesRegionsInfo.h>
@@ -490,6 +491,7 @@ public:
     /// thus we need to pay attention to scan_context_map usage that time.
     std::unordered_map<String, DM::ScanContextPtr> scan_context_map;
     std::unordered_map<String, ColumnarScanContextPtr> columnar_scan_context_map;
+    std::unordered_map<String, FTSExecutionContextPtr> fts_execution_context_map;
 
     RuntimeFilterMgr runtime_filter_mgr;
 

@@ -16,6 +16,7 @@
 #include <DataStreams/TiRemoteBlockInputStream.h>
 #include <Flash/Coprocessor/ColumnarScanContext.h>
 #include <Flash/Coprocessor/DAGContext.h>
+#include <Flash/Coprocessor/FTSExecutionContext.h>
 #include <Flash/Coprocessor/RemoteExecutionSummary.h>
 #include <Flash/Statistics/CommonExecutorImpl.h>
 #include <Flash/Statistics/ExchangeReceiverImpl.h>
@@ -189,6 +190,13 @@ void ExecutorStatisticsCollector::fillExecutionSummary(
         if (!current.columnar_scan_context)
             current.columnar_scan_context = std::make_shared<ColumnarScanContext>();
         current.columnar_scan_context->merge(*iter->second);
+    }
+    if (const auto & iter = dag_context->fts_execution_context_map.find(executor_id);
+        iter != dag_context->fts_execution_context_map.end() && iter->second)
+    {
+        if (!current.fts_execution_context)
+            current.fts_execution_context = std::make_shared<FTSExecutionContext>();
+        current.fts_execution_context->merge(*iter->second);
     }
 
     current.time_processed_ns += dag_context->compile_time_ns;

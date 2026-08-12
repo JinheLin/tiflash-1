@@ -280,6 +280,28 @@ pub mod root {
         }
         #[repr(C)]
         #[derive(Debug, Default, Copy, Clone)]
+        pub struct FTSRuntimeStats {
+            pub index_query_time_sum_ns: u64,
+            pub shard_count: u64,
+            pub shard_query_time_sum_ns: u64,
+            pub full_fallback_shard_count: u64,
+            pub full_fallback_query_time_sum_ns: u64,
+            pub tantivy_index_count: u64,
+            pub merge_mvcc_time_sum_ns: u64,
+            pub merge_mvcc_output_count: u64,
+            pub index_hit_count: u64,
+            pub unindexed_read_count: u64,
+            pub fallback_eval_count: u64,
+            pub fallback_processing_time_sum_ns: u64,
+            pub fallback_match_count: u64,
+            pub output_count: u64,
+            pub row_lookup_time_sum_ns: u64,
+            pub used_row_lookup: u64,
+        }
+        const _: [(); 16 * std::mem::size_of::<u64>()] =
+            [(); std::mem::size_of::<FTSRuntimeStats>()];
+        #[repr(C)]
+        #[derive(Debug, Default, Copy, Clone)]
         pub struct ColumnarScanStats {
             pub mvcc_input_rows: u64,
             pub mvcc_input_bytes: u64,
@@ -294,7 +316,10 @@ pub mod root {
             pub rough_check_unknown_packs: u64,
             pub remote_segments: u64,
             pub total_segments: u64,
+            pub fts: root::DB::FTSRuntimeStats,
         }
+        const _: [(); 29 * std::mem::size_of::<u64>()] =
+            [(); std::mem::size_of::<ColumnarScanStats>()];
         #[repr(C)]
         #[derive(Debug)]
         pub struct SSTReaderInterfaces {

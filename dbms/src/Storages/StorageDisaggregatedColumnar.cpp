@@ -31,6 +31,7 @@
 #include <Flash/Coprocessor/DAGPipeline.h>
 #include <Flash/Coprocessor/DAGQueryInfo.h>
 #include <Flash/Coprocessor/DAGUtils.h>
+#include <Flash/Coprocessor/FTSExecutionContext.h>
 #include <Flash/Coprocessor/FilterConditions.h>
 #include <Flash/Coprocessor/GenSchemaAndColumn.h>
 #include <Flash/Coprocessor/InterpreterUtils.h>
@@ -1278,6 +1279,11 @@ std::vector<RNColumnarReadTaskPtr> RNColumnarReadTask::buildColumnarReadTask(
     columnar_scan_context->columns
         = shared_reader_context->column_defines != nullptr ? shared_reader_context->column_defines->size() : 0;
     dag_context->columnar_scan_context_map[table_scan.getTableScanExecutorID()] = columnar_scan_context;
+    if (table_scan.getFTSQueryInfo().query_type() != tipb::FTSQueryType::FTSQueryTypeInvalid)
+    {
+        dag_context->fts_execution_context_map[table_scan.getTableScanExecutorID()]
+            = std::make_shared<FTSExecutionContext>();
+    }
 
     std::vector<RNColumnarReaderPlan> all_reader_plans;
     all_reader_plans.reserve(total_max_reader_num);
@@ -1379,6 +1385,11 @@ void RNColumnarInputStream::mergeReaderStats()
 
     const auto stats = proxy_helper->cloud_storage_engine_interfaces.fn_columnar_scan_stats(reader.value());
     scan_ctx_iter->second->merge(stats);
+    if (auto fts_ctx_iter = dag_context->fts_execution_context_map.find(executor_id);
+        fts_ctx_iter != dag_context->fts_execution_context_map.end() && fts_ctx_iter->second)
+    {
+        fts_ctx_iter->second->merge(stats.fts);
+    }
 }
 
 RNColumnarInputStream::~RNColumnarInputStream()

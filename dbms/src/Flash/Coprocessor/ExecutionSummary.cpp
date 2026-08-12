@@ -15,6 +15,7 @@
 #include <Common/Exception.h>
 #include <Flash/Coprocessor/ColumnarScanContext.h>
 #include <Flash/Coprocessor/ExecutionSummary.h>
+#include <Flash/Coprocessor/FTSExecutionContext.h>
 #include <Flash/Statistics/BaseRuntimeStatistics.h>
 #include <Storages/DeltaMerge/ScanContext.h>
 #include <common/likely.h>
@@ -50,6 +51,12 @@ void ExecutionSummary::merge(const ExecutionSummary & other)
             columnar_scan_context = std::make_shared<ColumnarScanContext>();
         columnar_scan_context->merge(*other.columnar_scan_context);
     }
+    if (other.fts_execution_context)
+    {
+        if (!fts_execution_context)
+            fts_execution_context = std::make_shared<FTSExecutionContext>();
+        fts_execution_context->merge(*other.fts_execution_context);
+    }
 }
 
 void ExecutionSummary::merge(const tipb::ExecutorExecutionSummary & other)
@@ -76,6 +83,12 @@ void ExecutionSummary::merge(const tipb::ExecutorExecutionSummary & other)
         if (!columnar_scan_context)
             columnar_scan_context = std::make_shared<ColumnarScanContext>();
         columnar_scan_context->merge(other.columnar_scan_context());
+    }
+    if (other.has_fts())
+    {
+        if (!fts_execution_context)
+            fts_execution_context = std::make_shared<FTSExecutionContext>();
+        fts_execution_context->merge(other.fts());
     }
 }
 
@@ -114,6 +127,11 @@ void ExecutionSummary::init(const tipb::ExecutorExecutionSummary & other)
     {
         columnar_scan_context = std::make_shared<ColumnarScanContext>();
         columnar_scan_context->deserialize(other.columnar_scan_context());
+    }
+    if (other.has_fts())
+    {
+        fts_execution_context = std::make_shared<FTSExecutionContext>();
+        fts_execution_context->deserialize(other.fts());
     }
 }
 

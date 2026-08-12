@@ -15,6 +15,7 @@
 #include <Common/TiFlashMetrics.h>
 #include <Flash/Coprocessor/ColumnarScanContext.h>
 #include <Flash/Coprocessor/DAGContext.h>
+#include <Flash/Coprocessor/FTSExecutionContext.h>
 #include <Flash/Statistics/ExecutionSummaryHelper.h>
 #include <Storages/DeltaMerge/ScanContext.h>
 
@@ -36,6 +37,8 @@ void fillTiExecutionSummary(
         execution_summary->mutable_columnar_scan_context()->CopyFrom(current.columnar_scan_context->serialize());
     else
         execution_summary->mutable_tiflash_scan_context()->CopyFrom(current.scan_context->serialize());
+    if (current.fts_execution_context)
+        execution_summary->mutable_fts()->CopyFrom(current.fts_execution_context->serialize());
     execution_summary->mutable_tiflash_wait_summary()->set_mintso_wait_ns(current.time_minTSO_wait_ns);
     execution_summary->mutable_tiflash_wait_summary()->set_pipeline_breaker_wait_ns(
         current.time_pipeline_breaker_wait_ns);

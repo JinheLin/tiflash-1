@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Flash/Coprocessor/ExecutionSummary.h>
+#include <Flash/Coprocessor/FTSExecutionContext.h>
 #include <Flash/Mpp/MPPTaskStatistics.h>
 #include <Flash/Mpp/MPPTunnelSet.h>
 #include <Interpreters/Context.h>
@@ -23,6 +25,56 @@ namespace DB
 {
 namespace tests
 {
+TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
+{
+    FTSRuntimeStats stats{
+        .index_query_time_sum_ns = 1,
+        .shard_count = 2,
+        .shard_query_time_sum_ns = 3,
+        .full_fallback_shard_count = 4,
+        .full_fallback_query_time_sum_ns = 5,
+        .tantivy_index_count = 6,
+        .merge_mvcc_time_sum_ns = 7,
+        .merge_mvcc_output_count = 8,
+        .index_hit_count = 9,
+        .unindexed_read_count = 10,
+        .fallback_eval_count = 11,
+        .fallback_processing_time_sum_ns = 12,
+        .fallback_match_count = 13,
+        .output_count = 14,
+        .row_lookup_time_sum_ns = 15,
+        .used_row_lookup = 1,
+    };
+
+    FTSExecutionContext context;
+    context.merge(stats);
+    const auto pb = context.serialize();
+    ASSERT_EQ(pb.index_query_time_sum_ns(), 1);
+    ASSERT_EQ(pb.shard_count(), 2);
+    ASSERT_EQ(pb.shard_query_time_sum_ns(), 3);
+    ASSERT_EQ(pb.full_fallback_shard_count(), 4);
+    ASSERT_EQ(pb.full_fallback_query_time_sum_ns(), 5);
+    ASSERT_EQ(pb.tantivy_index_count(), 6);
+    ASSERT_EQ(pb.merge_mvcc_time_sum_ns(), 7);
+    ASSERT_EQ(pb.merge_mvcc_output_count(), 8);
+    ASSERT_EQ(pb.index_hit_count(), 9);
+    ASSERT_EQ(pb.unindexed_read_count(), 10);
+    ASSERT_EQ(pb.fallback_eval_count(), 11);
+    ASSERT_EQ(pb.fallback_processing_time_sum_ns(), 12);
+    ASSERT_EQ(pb.fallback_match_count(), 13);
+    ASSERT_EQ(pb.output_count(), 14);
+    ASSERT_EQ(pb.row_lookup_time_sum_ns(), 15);
+    ASSERT_TRUE(pb.used_row_lookup());
+
+    tipb::ExecutorExecutionSummary remote;
+    remote.mutable_fts()->CopyFrom(pb);
+    ExecutionSummary summary;
+    summary.init(remote);
+    ASSERT_NE(summary.fts_execution_context, nullptr);
+    const auto roundtrip = summary.fts_execution_context->serialize();
+    ASSERT_EQ(roundtrip.SerializeAsString(), pb.SerializeAsString());
+}
+
 class ExecutionSummaryTestRunner : public DB::tests::ExecutorTest
 {
 public:
