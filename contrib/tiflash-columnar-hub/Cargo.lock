@@ -3698,6 +3698,7 @@ dependencies = [
  "aliyun",
  "anyhow",
  "api_version",
+ "arc-swap 1.9.1",
  "arrow-buffer",
  "async-once-cell",
  "async-recursion 1.1.1",
@@ -3723,6 +3724,7 @@ dependencies = [
  "crc32fast",
  "crossbeam",
  "crossbeam-queue",
+ "crossbeam-skiplist",
  "dashmap 5.5.3",
  "dyn-clone",
  "engine_traits",
@@ -3768,6 +3770,7 @@ dependencies = [
  "rusoto_s3",
  "schema",
  "security",
+ "seize",
  "serde",
  "serde_derive",
  "serde_json",
@@ -3808,7 +3811,7 @@ dependencies = [
 [[package]]
 name = "kvproto"
 version = "0.0.2"
-source = "git+https://github.com/pingcap/kvproto.git#a15c348f8713e5c492b6dfb41224c464b5824979"
+source = "git+https://github.com/pingcap/kvproto.git?rev=683dad8fa3689deb243f2ff8ab5847c97af53e38#683dad8fa3689deb243f2ff8ab5847c97af53e38"
 dependencies = [
  "bytes",
  "futures 0.3.32",
@@ -7027,7 +7030,10 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "slog",
+ "slog-global",
  "thiserror 1.0.69",
+ "tokio",
  "workspace-hack",
 ]
 
