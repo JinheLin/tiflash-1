@@ -223,9 +223,9 @@ struct FTSRuntimeStats {
   uint64_t index_hit_count;
   uint64_t unindexed_read_count;
   uint64_t fallback_eval_count;
-  uint64_t fallback_processing_time_sum_ns;
+  uint64_t fallback_eval_time_sum_ns;
   uint64_t fallback_match_count;
-  uint64_t output_count;
+  uint64_t fts_candidate_count;
   uint64_t row_lookup_time_sum_ns;
   uint64_t used_row_lookup;
 };

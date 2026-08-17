@@ -109,9 +109,9 @@ impl From<kvengine::table::fts::FtsRuntimeStats> for FTSRuntimeStats {
             index_hit_count: stats.index_hit_count,
             unindexed_read_count: stats.unindexed_read_count,
             fallback_eval_count: stats.fallback_eval_count,
-            fallback_processing_time_sum_ns: stats.fallback_processing_time_sum_ns,
+            fallback_eval_time_sum_ns: stats.fallback_eval_time_sum_ns,
             fallback_match_count: stats.fallback_match_count,
-            output_count: stats.output_count,
+            fts_candidate_count: stats.fts_candidate_count,
             row_lookup_time_sum_ns: stats.row_lookup_time_sum_ns,
             used_row_lookup: u64::from(stats.used_row_lookup),
         }

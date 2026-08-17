@@ -292,9 +292,9 @@ pub mod root {
             pub index_hit_count: u64,
             pub unindexed_read_count: u64,
             pub fallback_eval_count: u64,
-            pub fallback_processing_time_sum_ns: u64,
+            pub fallback_eval_time_sum_ns: u64,
             pub fallback_match_count: u64,
-            pub output_count: u64,
+            pub fts_candidate_count: u64,
             pub row_lookup_time_sum_ns: u64,
             pub used_row_lookup: u64,
         }

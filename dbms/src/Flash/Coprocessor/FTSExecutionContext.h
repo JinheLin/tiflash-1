@@ -36,9 +36,9 @@ public:
     std::atomic<UInt64> index_hit_count{0};
     std::atomic<UInt64> unindexed_read_count{0};
     std::atomic<UInt64> fallback_eval_count{0};
-    std::atomic<UInt64> fallback_processing_time_sum_ns{0};
+    std::atomic<UInt64> fallback_eval_time_sum_ns{0};
     std::atomic<UInt64> fallback_match_count{0};
-    std::atomic<UInt64> output_count{0};
+    std::atomic<UInt64> fts_candidate_count{0};
     std::atomic<UInt64> row_lookup_time_sum_ns{0};
     std::atomic<bool> used_row_lookup{false};
 
@@ -55,9 +55,9 @@ public:
         index_hit_count = pb.index_hit_count();
         unindexed_read_count = pb.unindexed_read_count();
         fallback_eval_count = pb.fallback_eval_count();
-        fallback_processing_time_sum_ns = pb.fallback_processing_time_sum_ns();
+        fallback_eval_time_sum_ns = pb.fallback_eval_time_sum_ns();
         fallback_match_count = pb.fallback_match_count();
-        output_count = pb.output_count();
+        fts_candidate_count = pb.fts_candidate_count();
         row_lookup_time_sum_ns = pb.row_lookup_time_sum_ns();
         used_row_lookup = pb.used_row_lookup();
     }
@@ -76,9 +76,9 @@ public:
         pb.set_index_hit_count(index_hit_count.load());
         pb.set_unindexed_read_count(unindexed_read_count.load());
         pb.set_fallback_eval_count(fallback_eval_count.load());
-        pb.set_fallback_processing_time_sum_ns(fallback_processing_time_sum_ns.load());
+        pb.set_fallback_eval_time_sum_ns(fallback_eval_time_sum_ns.load());
         pb.set_fallback_match_count(fallback_match_count.load());
-        pb.set_output_count(output_count.load());
+        pb.set_fts_candidate_count(fts_candidate_count.load());
         pb.set_row_lookup_time_sum_ns(row_lookup_time_sum_ns.load());
         pb.set_used_row_lookup(used_row_lookup.load());
         return pb;
@@ -97,9 +97,9 @@ public:
         index_hit_count += other.index_hit_count.load();
         unindexed_read_count += other.unindexed_read_count.load();
         fallback_eval_count += other.fallback_eval_count.load();
-        fallback_processing_time_sum_ns += other.fallback_processing_time_sum_ns.load();
+        fallback_eval_time_sum_ns += other.fallback_eval_time_sum_ns.load();
         fallback_match_count += other.fallback_match_count.load();
-        output_count += other.output_count.load();
+        fts_candidate_count += other.fts_candidate_count.load();
         row_lookup_time_sum_ns += other.row_lookup_time_sum_ns.load();
         mergeUsedRowLookup(other.used_row_lookup.load());
     }
@@ -117,9 +117,9 @@ public:
         index_hit_count += other.index_hit_count();
         unindexed_read_count += other.unindexed_read_count();
         fallback_eval_count += other.fallback_eval_count();
-        fallback_processing_time_sum_ns += other.fallback_processing_time_sum_ns();
+        fallback_eval_time_sum_ns += other.fallback_eval_time_sum_ns();
         fallback_match_count += other.fallback_match_count();
-        output_count += other.output_count();
+        fts_candidate_count += other.fts_candidate_count();
         row_lookup_time_sum_ns += other.row_lookup_time_sum_ns();
         mergeUsedRowLookup(other.used_row_lookup());
     }
@@ -137,9 +137,9 @@ public:
         index_hit_count += other.index_hit_count;
         unindexed_read_count += other.unindexed_read_count;
         fallback_eval_count += other.fallback_eval_count;
-        fallback_processing_time_sum_ns += other.fallback_processing_time_sum_ns;
+        fallback_eval_time_sum_ns += other.fallback_eval_time_sum_ns;
         fallback_match_count += other.fallback_match_count;
-        output_count += other.output_count;
+        fts_candidate_count += other.fts_candidate_count;
         row_lookup_time_sum_ns += other.row_lookup_time_sum_ns;
         mergeUsedRowLookup(other.used_row_lookup != 0);
     }

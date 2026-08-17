@@ -39,9 +39,9 @@ TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
         .index_hit_count = 9,
         .unindexed_read_count = 10,
         .fallback_eval_count = 11,
-        .fallback_processing_time_sum_ns = 12,
+        .fallback_eval_time_sum_ns = 12,
         .fallback_match_count = 13,
-        .output_count = 14,
+        .fts_candidate_count = 14,
         .row_lookup_time_sum_ns = 15,
         .used_row_lookup = 1,
     };
@@ -60,9 +60,9 @@ TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
     ASSERT_EQ(pb.index_hit_count(), 9);
     ASSERT_EQ(pb.unindexed_read_count(), 10);
     ASSERT_EQ(pb.fallback_eval_count(), 11);
-    ASSERT_EQ(pb.fallback_processing_time_sum_ns(), 12);
+    ASSERT_EQ(pb.fallback_eval_time_sum_ns(), 12);
     ASSERT_EQ(pb.fallback_match_count(), 13);
-    ASSERT_EQ(pb.output_count(), 14);
+    ASSERT_EQ(pb.fts_candidate_count(), 14);
     ASSERT_EQ(pb.row_lookup_time_sum_ns(), 15);
     ASSERT_TRUE(pb.used_row_lookup());
 
