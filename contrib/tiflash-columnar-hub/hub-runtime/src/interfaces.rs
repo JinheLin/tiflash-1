@@ -291,6 +291,7 @@ pub mod root {
             pub merge_mvcc_output_count: u64,
             pub index_hit_count: u64,
             pub unindexed_read_count: u64,
+            pub unindexed_read_time_sum_ns: u64,
             pub fallback_eval_count: u64,
             pub fallback_eval_time_sum_ns: u64,
             pub fallback_match_count: u64,
@@ -298,7 +299,7 @@ pub mod root {
             pub row_lookup_time_sum_ns: u64,
             pub used_row_lookup: u64,
         }
-        const _: [(); 16 * std::mem::size_of::<u64>()] =
+        const _: [(); 17 * std::mem::size_of::<u64>()] =
             [(); std::mem::size_of::<FTSRuntimeStats>()];
         #[repr(C)]
         #[derive(Debug, Default, Copy, Clone)]
@@ -318,7 +319,7 @@ pub mod root {
             pub total_segments: u64,
             pub fts: root::DB::FTSRuntimeStats,
         }
-        const _: [(); 29 * std::mem::size_of::<u64>()] =
+        const _: [(); 30 * std::mem::size_of::<u64>()] =
             [(); std::mem::size_of::<ColumnarScanStats>()];
         #[repr(C)]
         #[derive(Debug)]

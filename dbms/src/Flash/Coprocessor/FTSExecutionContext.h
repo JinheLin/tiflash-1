@@ -35,6 +35,7 @@ public:
     std::atomic<UInt64> merge_mvcc_output_count{0};
     std::atomic<UInt64> index_hit_count{0};
     std::atomic<UInt64> unindexed_read_count{0};
+    std::atomic<UInt64> unindexed_read_time_sum_ns{0};
     std::atomic<UInt64> fallback_eval_count{0};
     std::atomic<UInt64> fallback_eval_time_sum_ns{0};
     std::atomic<UInt64> fallback_match_count{0};
@@ -54,6 +55,7 @@ public:
         merge_mvcc_output_count = pb.merge_mvcc_output_count();
         index_hit_count = pb.index_hit_count();
         unindexed_read_count = pb.unindexed_read_count();
+        unindexed_read_time_sum_ns = pb.unindexed_read_time_sum_ns();
         fallback_eval_count = pb.fallback_eval_count();
         fallback_eval_time_sum_ns = pb.fallback_eval_time_sum_ns();
         fallback_match_count = pb.fallback_match_count();
@@ -75,6 +77,7 @@ public:
         pb.set_merge_mvcc_output_count(merge_mvcc_output_count.load());
         pb.set_index_hit_count(index_hit_count.load());
         pb.set_unindexed_read_count(unindexed_read_count.load());
+        pb.set_unindexed_read_time_sum_ns(unindexed_read_time_sum_ns.load());
         pb.set_fallback_eval_count(fallback_eval_count.load());
         pb.set_fallback_eval_time_sum_ns(fallback_eval_time_sum_ns.load());
         pb.set_fallback_match_count(fallback_match_count.load());
@@ -96,6 +99,7 @@ public:
         merge_mvcc_output_count += other.merge_mvcc_output_count.load();
         index_hit_count += other.index_hit_count.load();
         unindexed_read_count += other.unindexed_read_count.load();
+        unindexed_read_time_sum_ns += other.unindexed_read_time_sum_ns.load();
         fallback_eval_count += other.fallback_eval_count.load();
         fallback_eval_time_sum_ns += other.fallback_eval_time_sum_ns.load();
         fallback_match_count += other.fallback_match_count.load();
@@ -116,6 +120,7 @@ public:
         merge_mvcc_output_count += other.merge_mvcc_output_count();
         index_hit_count += other.index_hit_count();
         unindexed_read_count += other.unindexed_read_count();
+        unindexed_read_time_sum_ns += other.unindexed_read_time_sum_ns();
         fallback_eval_count += other.fallback_eval_count();
         fallback_eval_time_sum_ns += other.fallback_eval_time_sum_ns();
         fallback_match_count += other.fallback_match_count();
@@ -136,6 +141,7 @@ public:
         merge_mvcc_output_count += other.merge_mvcc_output_count;
         index_hit_count += other.index_hit_count;
         unindexed_read_count += other.unindexed_read_count;
+        unindexed_read_time_sum_ns += other.unindexed_read_time_sum_ns;
         fallback_eval_count += other.fallback_eval_count;
         fallback_eval_time_sum_ns += other.fallback_eval_time_sum_ns;
         fallback_match_count += other.fallback_match_count;

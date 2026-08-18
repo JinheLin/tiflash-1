@@ -108,6 +108,7 @@ impl From<kvengine::table::fts::FtsRuntimeStats> for FTSRuntimeStats {
             merge_mvcc_output_count: stats.merge_mvcc_output_count,
             index_hit_count: stats.index_hit_count,
             unindexed_read_count: stats.unindexed_read_count,
+            unindexed_read_time_sum_ns: stats.unindexed_read_time_sum_ns,
             fallback_eval_count: stats.fallback_eval_count,
             fallback_eval_time_sum_ns: stats.fallback_eval_time_sum_ns,
             fallback_match_count: stats.fallback_match_count,

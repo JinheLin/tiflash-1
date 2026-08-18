@@ -222,6 +222,7 @@ struct FTSRuntimeStats {
   uint64_t merge_mvcc_output_count;
   uint64_t index_hit_count;
   uint64_t unindexed_read_count;
+  uint64_t unindexed_read_time_sum_ns;
   uint64_t fallback_eval_count;
   uint64_t fallback_eval_time_sum_ns;
   uint64_t fallback_match_count;
@@ -230,7 +231,7 @@ struct FTSRuntimeStats {
   uint64_t used_row_lookup;
 };
 
-static_assert(sizeof(FTSRuntimeStats) == 16 * sizeof(uint64_t));
+static_assert(sizeof(FTSRuntimeStats) == 17 * sizeof(uint64_t));
 
 struct ColumnarScanStats {
   uint64_t mvcc_input_rows;
@@ -249,7 +250,7 @@ struct ColumnarScanStats {
   FTSRuntimeStats fts;
 };
 
-static_assert(sizeof(ColumnarScanStats) == 29 * sizeof(uint64_t));
+static_assert(sizeof(ColumnarScanStats) == 30 * sizeof(uint64_t));
 
 struct SSTReaderInterfaces {
   SSTReaderPtr (*fn_get_sst_reader)(SSTView, RaftStoreProxyPtr);

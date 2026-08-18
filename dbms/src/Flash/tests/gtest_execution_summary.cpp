@@ -38,11 +38,12 @@ TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
         .merge_mvcc_output_count = 8,
         .index_hit_count = 9,
         .unindexed_read_count = 10,
-        .fallback_eval_count = 11,
-        .fallback_eval_time_sum_ns = 12,
-        .fallback_match_count = 13,
-        .fts_candidate_count = 14,
-        .row_lookup_time_sum_ns = 15,
+        .unindexed_read_time_sum_ns = 11,
+        .fallback_eval_count = 12,
+        .fallback_eval_time_sum_ns = 13,
+        .fallback_match_count = 14,
+        .fts_candidate_count = 15,
+        .row_lookup_time_sum_ns = 16,
         .used_row_lookup = 1,
     };
 
@@ -59,11 +60,12 @@ TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
     ASSERT_EQ(pb.merge_mvcc_output_count(), 8);
     ASSERT_EQ(pb.index_hit_count(), 9);
     ASSERT_EQ(pb.unindexed_read_count(), 10);
-    ASSERT_EQ(pb.fallback_eval_count(), 11);
-    ASSERT_EQ(pb.fallback_eval_time_sum_ns(), 12);
-    ASSERT_EQ(pb.fallback_match_count(), 13);
-    ASSERT_EQ(pb.fts_candidate_count(), 14);
-    ASSERT_EQ(pb.row_lookup_time_sum_ns(), 15);
+    ASSERT_EQ(pb.unindexed_read_time_sum_ns(), 11);
+    ASSERT_EQ(pb.fallback_eval_count(), 12);
+    ASSERT_EQ(pb.fallback_eval_time_sum_ns(), 13);
+    ASSERT_EQ(pb.fallback_match_count(), 14);
+    ASSERT_EQ(pb.fts_candidate_count(), 15);
+    ASSERT_EQ(pb.row_lookup_time_sum_ns(), 16);
     ASSERT_TRUE(pb.used_row_lookup());
 
     tipb::ExecutorExecutionSummary remote;
