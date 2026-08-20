@@ -115,6 +115,7 @@ impl From<kvengine::table::fts::FtsRuntimeStats> for FTSRuntimeStats {
             fts_candidate_count: stats.fts_candidate_count,
             row_lookup_time_sum_ns: stats.row_lookup_time_sum_ns,
             used_row_lookup: u64::from(stats.used_row_lookup),
+            query_token_count: stats.query_token_count,
         }
     }
 }

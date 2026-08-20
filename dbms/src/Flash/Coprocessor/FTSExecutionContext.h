@@ -19,6 +19,8 @@
 #include <tipb/executor.pb.h>
 
 #include <atomic>
+#include <mutex>
+#include <optional>
 
 namespace DB
 {
@@ -62,6 +64,9 @@ public:
         fts_candidate_count = pb.fts_candidate_count();
         row_lookup_time_sum_ns = pb.row_lookup_time_sum_ns();
         used_row_lookup = pb.used_row_lookup();
+        const auto incoming = derivedStatsFromProto(pb);
+        std::lock_guard lock(derived_stats_mutex);
+        derived_stats = incoming;
     }
 
     tipb::FTSExecutionSummary serialize() const
@@ -84,6 +89,11 @@ public:
         pb.set_fts_candidate_count(fts_candidate_count.load());
         pb.set_row_lookup_time_sum_ns(row_lookup_time_sum_ns.load());
         pb.set_used_row_lookup(used_row_lookup.load());
+        const auto snapshot = derivedStatsSnapshot();
+        if (snapshot.query_token_count_complete && snapshot.query_token_count)
+            pb.set_query_token_count(*snapshot.query_token_count);
+        if (snapshot.row_lookup_count_complete && snapshot.has_row_lookup_count)
+            pb.set_row_lookup_count(snapshot.row_lookup_count);
         return pb;
     }
 
@@ -106,6 +116,7 @@ public:
         fts_candidate_count += other.fts_candidate_count.load();
         row_lookup_time_sum_ns += other.row_lookup_time_sum_ns.load();
         mergeUsedRowLookup(other.used_row_lookup.load());
+        mergeDerivedStats(other.derivedStatsSnapshot());
     }
 
     void merge(const tipb::FTSExecutionSummary & other)
@@ -127,6 +138,7 @@ public:
         fts_candidate_count += other.fts_candidate_count();
         row_lookup_time_sum_ns += other.row_lookup_time_sum_ns();
         mergeUsedRowLookup(other.used_row_lookup());
+        mergeDerivedStats(derivedStatsFromProto(other));
     }
 
     void merge(const FTSRuntimeStats & other)
@@ -148,13 +160,79 @@ public:
         fts_candidate_count += other.fts_candidate_count;
         row_lookup_time_sum_ns += other.row_lookup_time_sum_ns;
         mergeUsedRowLookup(other.used_row_lookup != 0);
+        if (other.shard_count != 0)
+        {
+            DerivedStats incoming;
+            incoming.query_token_count = other.query_token_count;
+            incoming.has_row_lookup_count = true;
+            incoming.row_lookup_count = other.used_row_lookup != 0 ? other.fts_candidate_count : 0;
+            mergeDerivedStats(incoming);
+        }
     }
 
 private:
+    struct DerivedStats
+    {
+        std::optional<UInt64> query_token_count;
+        bool query_token_count_complete = true;
+        UInt64 row_lookup_count = 0;
+        bool has_row_lookup_count = false;
+        bool row_lookup_count_complete = true;
+    };
+
+    static DerivedStats derivedStatsFromProto(const tipb::FTSExecutionSummary & pb)
+    {
+        DerivedStats result;
+        result.query_token_count_complete = pb.has_query_token_count();
+        if (result.query_token_count_complete)
+            result.query_token_count = pb.query_token_count();
+        result.has_row_lookup_count = pb.has_row_lookup_count();
+        result.row_lookup_count_complete = result.has_row_lookup_count;
+        if (result.has_row_lookup_count)
+            result.row_lookup_count = pb.row_lookup_count();
+        return result;
+    }
+
+    DerivedStats derivedStatsSnapshot() const
+    {
+        std::lock_guard lock(derived_stats_mutex);
+        return derived_stats;
+    }
+
+    void mergeDerivedStats(const DerivedStats & other)
+    {
+        std::lock_guard lock(derived_stats_mutex);
+        if (!other.query_token_count_complete || !other.query_token_count)
+        {
+            derived_stats.query_token_count_complete = false;
+        }
+        else if (!derived_stats.query_token_count)
+        {
+            derived_stats.query_token_count = other.query_token_count;
+        }
+        else if (derived_stats.query_token_count != other.query_token_count)
+        {
+            derived_stats.query_token_count_complete = false;
+        }
+
+        if (!other.row_lookup_count_complete || !other.has_row_lookup_count)
+        {
+            derived_stats.row_lookup_count_complete = false;
+        }
+        else
+        {
+            derived_stats.has_row_lookup_count = true;
+            derived_stats.row_lookup_count += other.row_lookup_count;
+        }
+    }
+
     void mergeUsedRowLookup(bool value)
     {
         if (value)
             used_row_lookup = true;
     }
+
+    mutable std::mutex derived_stats_mutex;
+    DerivedStats derived_stats;
 };
 } // namespace DB

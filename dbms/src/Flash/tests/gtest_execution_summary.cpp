@@ -45,6 +45,7 @@ TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
         .fts_candidate_count = 15,
         .row_lookup_time_sum_ns = 16,
         .used_row_lookup = 1,
+        .query_token_count = 18,
     };
 
     FTSExecutionContext context;
@@ -67,6 +68,10 @@ TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
     ASSERT_EQ(pb.fts_candidate_count(), 15);
     ASSERT_EQ(pb.row_lookup_time_sum_ns(), 16);
     ASSERT_TRUE(pb.used_row_lookup());
+    ASSERT_TRUE(pb.has_query_token_count());
+    ASSERT_EQ(pb.query_token_count(), 18);
+    ASSERT_TRUE(pb.has_row_lookup_count());
+    ASSERT_EQ(pb.row_lookup_count(), 15);
 
     tipb::ExecutorExecutionSummary remote;
     remote.mutable_fts()->CopyFrom(pb);
@@ -75,6 +80,53 @@ TEST(FTSExecutionContextTest, MergeSerializeAndDeserialize)
     ASSERT_NE(summary.fts_execution_context, nullptr);
     const auto roundtrip = summary.fts_execution_context->serialize();
     ASSERT_EQ(roundtrip.SerializeAsString(), pb.SerializeAsString());
+}
+
+TEST(FTSExecutionContextTest, DeriveRowLookupBeforeMergingReaders)
+{
+    FTSRuntimeStats row_lookup_stats{
+        .shard_count = 1,
+        .fts_candidate_count = 5,
+        .used_row_lookup = 1,
+        .query_token_count = 3,
+    };
+    FTSRuntimeStats full_fallback_stats{
+        .shard_count = 1,
+        .fts_candidate_count = 7,
+        .used_row_lookup = 0,
+        .query_token_count = 3,
+    };
+
+    FTSExecutionContext context;
+    context.merge(row_lookup_stats);
+    context.merge(full_fallback_stats);
+    const auto pb = context.serialize();
+    ASSERT_EQ(pb.fts_candidate_count(), 12);
+    ASSERT_TRUE(pb.used_row_lookup());
+    ASSERT_TRUE(pb.has_row_lookup_count());
+    ASSERT_EQ(pb.row_lookup_count(), 5);
+    ASSERT_TRUE(pb.has_query_token_count());
+    ASSERT_EQ(pb.query_token_count(), 3);
+}
+
+TEST(FTSExecutionContextTest, OmitInconsistentQueryTokenCount)
+{
+    FTSRuntimeStats first{
+        .shard_count = 1,
+        .query_token_count = 3,
+    };
+    FTSRuntimeStats second{
+        .shard_count = 1,
+        .query_token_count = 4,
+    };
+
+    FTSExecutionContext context;
+    context.merge(first);
+    context.merge(second);
+    const auto pb = context.serialize();
+    ASSERT_FALSE(pb.has_query_token_count());
+    ASSERT_TRUE(pb.has_row_lookup_count());
+    ASSERT_EQ(pb.row_lookup_count(), 0);
 }
 
 class ExecutionSummaryTestRunner : public DB::tests::ExecutorTest
