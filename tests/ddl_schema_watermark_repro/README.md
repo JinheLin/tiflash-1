@@ -16,6 +16,8 @@
 
 `run_matrix.py` 只有单轮矩阵，没有持续写入及 24 小时调度功能，不能通过重复调用就声称通过长跑计划。缺失列脚本的成功表示复现条件成立且数据正确，不表示已修复缺列问题。
 
+重启长跑发现的 proxy Ready 分页调度停滞，其复现步骤、根因、最小候选修复及验证记录集中在 [PROXY_READY_RECOVERY_BUG.md](PROXY_READY_RECOVERY_BUG.md)。
+
 ## TLA+ / TLC
 
 模型入口为 [tla/SchemaWatermark.tla](tla/SchemaWatermark.tla)，完整说明及历史验证结果见 [tla/README.md](tla/README.md)，反例解释见 [tla/COUNTEREXAMPLES.md](tla/COUNTEREXAMPLES.md)。独立运行只需要 Python 3.9+ 和 Java 11+，不需要下面的 TiUP 组件或 PyMySQL。
