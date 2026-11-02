@@ -39,12 +39,13 @@ def make_parser(description, allow_baseline=True):
     parser = argparse.ArgumentParser(description=description)
     for name in ('tiflash', 'tidb', 'tikv', 'pd'):
         parser.add_argument('--' + name, required=True, type=Path,
-                            help='Path to the component binary (TiDB/PD/TiKV must be v8.5.7)')
+                            help='Path to the component binary; version check uses --component-version')
     parser.add_argument('--output', required=True, type=Path, help='New result directory; must not exist')
     parser.add_argument('--tag', required=True, help='Unique TiUP tag for this isolated cluster')
     parser.add_argument('--offset', required=True, type=int)
     parser.add_argument('--debug-port', required=True, type=int)
     parser.add_argument('--expected-commit', help='Optional exact TiFlash build commit to verify')
+    parser.add_argument('--component-version', default='v8.5.7', help='Expected TiDB/PD/TiKV version')
     if allow_baseline:
         parser.add_argument('--baseline', action='store_true', help='Expect the v8.5.7 TiFlash behavior')
     else:
@@ -146,15 +147,25 @@ class Matrix:
                       any(x['key'] == 'engine' and x['value'] == 'tiflash'
                           for x in s['store'].get('labels', [])))
 
+    def write_configs(self, kv, tf):
+        kv.write_text('[raftstore]\nraft-log-gc-tick-interval="0s"\n'
+                      'raft-log-gc-count-limit=1000000\nraft-log-gc-size-limit="1GB"\n')
+        tf.write_text(f'tcp_port={self.debug_port}\n[logger]\nlevel="debug"\n'
+                      '[profiles.default]\nddl_sync_interval_seconds=3600\n')
+
+    def playground_options(self):
+        return []
+
     def start(self):
         versions = {}
         for component, binary in {'tiflash': self.binary, **self.components}.items():
             flag = 'version' if component == 'tiflash' else ('-V' if component == 'tidb' else '--version')
             version = subprocess.check_output([str(binary), flag], env=self.env, text=True, timeout=30)
             versions[component] = {'path': str(binary), 'sha256': file_sha(binary), 'version': version}
-            if component != 'tiflash' or self.args.baseline:
-                if not re.search(r'\bv?8\.5\.7\b', version):
-                    raise RuntimeError(f'{component} must be v8.5.7; got {version}')
+            required = 'v8.5.7' if component == 'tiflash' and self.args.baseline else (
+                self.args.component_version if component != 'tiflash' else None)
+            if required and not re.search(r'(?<![\w.])v?' + re.escape(required.lstrip('v')) + r'(?=$|[\s+-])', version):
+                raise RuntimeError(f'{component} must be {required}; got {version}')
         self.result['versions'] = versions
         match = re.search(r'^Git Commit Hash:\s*(\S+)', versions['tiflash']['version'], re.M)
         actual_commit = match.group(1) if match else None
@@ -168,15 +179,13 @@ class Matrix:
             raise RuntimeError(f'TiFlash commit mismatch: expected {self.args.expected_commit}, got {actual_commit}')
         self.save()
         kv = self.output / 'tikv.toml'
-        kv.write_text('[raftstore]\nraft-log-gc-tick-interval="0s"\n'
-                      'raft-log-gc-count-limit=1000000\nraft-log-gc-size-limit="1GB"\n')
         tf = self.output / 'tiflash.toml'
-        tf.write_text(f'tcp_port={self.debug_port}\n[logger]\nlevel="debug"\n'
-                      '[profiles.default]\nddl_sync_interval_seconds=3600\n')
-        wrapper = HERE / 'restartable_tiflash.py'
+        self.write_configs(kv, tf)
+        wrapper = getattr(self, 'wrapper_path', HERE / 'restartable_tiflash.py')
         command = ['tiup', 'playground', 'v8.5.7', '--tag', self.args.tag, '--db', '1', '--pd', '1',
                    '--kv', '1', '--tiflash', '1', '--without-monitor', '--port-offset', str(self.args.offset),
                    '--kv.config', str(kv), '--tiflash.config', str(tf), '--tiflash.binpath', str(wrapper)]
+        command += self.playground_options()
         for name, flag in [('tidb', 'db'), ('tikv', 'kv'), ('pd', 'pd')]:
             command += [f'--{flag}.binpath', str(self.components[name])]
         self.result['command'] = command
@@ -463,7 +472,7 @@ class Matrix:
     def cleanup(self):
         try:
             if self.paused and self.pid:
-                os.kill(self.pid, signal.SIGCONT)
+                self.signal_process(self.pid, signal.SIGCONT)
             self.gate.unlink(missing_ok=True)
             if self.failpoint:
                 self.debug('DBGInvoke disable_fail_point(pause_before_apply_raft_cmd)')
@@ -488,7 +497,7 @@ class Matrix:
             cmdline = Path(f'/proc/{pid}/cmdline')
             if cmdline.exists() and self.args.tag.encode() in cmdline.read_bytes():
                 try:
-                    os.kill(pid, signal.SIGTERM)
+                    self.signal_process(pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
         if self.proc is not None:
@@ -498,7 +507,12 @@ class Matrix:
                     self.proc.wait(timeout=50)
                 except subprocess.TimeoutExpired:
                     os.killpg(self.proc.pid, signal.SIGTERM)
-                    self.proc.wait(timeout=15)
+                    try:
+                        self.proc.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(self.proc.pid, signal.SIGKILL)
+                        self.proc.wait(timeout=5)
+                        self.result['forced_playground_cleanup'] = True
             self.result['playground_exit'] = self.proc.returncode
         deadline = time.monotonic() + 45
         for pid in candidates:
@@ -506,7 +520,7 @@ class Matrix:
             while cmdline.exists() and cmdline.read_bytes() and time.monotonic() < deadline:
                 time.sleep(0.2)
             if cmdline.exists() and self.args.tag.encode() in cmdline.read_bytes():
-                os.kill(pid, signal.SIGKILL)
+                self.signal_process(pid, signal.SIGKILL)
                 self.result.setdefault('forced_cleanup_pids', []).append(pid)
         self.result['tiflash_process_gone'] = all(
             not Path(f'/proc/{pid}/cmdline').exists() or not Path(f'/proc/{pid}/cmdline').read_bytes()
@@ -515,12 +529,16 @@ class Matrix:
         self.result['finished_at_unix'] = time.time()
         if (self.result.get('cleanup_error') or self.result.get('schema_sync_restore_error')
                 or self.result.get('forced_cleanup_pids') or not self.result['tiflash_process_gone']
+                or self.result.get('forced_playground_cleanup')
                 or (self.old_gc is not None and not self.result.get('gc_restored'))
                 or (self.proc is not None and self.result.get('playground_exit') != 0)):
             self.result['passed'] = False
         self.save()
         print(json.dumps({'finished':self.args.tag,'passed':self.result['passed'],
                           'gc_restored':self.result.get('gc_restored'),'playground_exit':self.result.get('playground_exit')},ensure_ascii=False),flush=True)
+
+    def signal_process(self, pid, sig):
+        os.kill(pid, sig)
 
 
 if __name__ == '__main__':

@@ -2,9 +2,11 @@
 
 目标是在持续写入和反复重启中验证：TiFlash 能恢复停机期间的写入和 DDL，重新建立与解码 schema 对应的 `schema_read_tso`；历史额外列仍能跳过，新增有效列不会丢失，最终存储值始终正确。
 
-本计划仅验证新版 TiFlash，使用 `jinhe/schema-read-watermark-extra-columns` 分支在本轮执行前更新后的源码构建，验证 PR #11168，不固定某个 commit。TiDB、PD、TiKV 统一使用 `v8.5.7`。正式执行时记录实际二进制版本和 SHA256，历史重启结果不能代替本轮验收。
+本计划仅验证新版 TiFlash，使用 `jinhe/schema-read-watermark-extra-columns` 分支在本轮执行前更新后的源码构建，验证 PR #11168，不固定某个 commit。TiDB、PD、TiKV 选择与待测 TiFlash 兼容的一套组件，显式传入二进制路径，并记录实际版本和 SHA256。历史重启结果不能代替本轮验收。
 
-这是一份执行规格。已有脚本提供单轮重启和校验能力，24 小时调度、持续负载及下述检查点需要由长跑执行器串接；不要向现有脚本传入未实现的 `--duration` 等参数。本次编写计划，不启动 24 小时集群。
+执行入口为本目录 [run_restart_soak.py](run_restart_soak.py)，持续负载和独立操作日志回放由 [soak_workload.py](soak_workload.py) 实现。默认执行 24 小时；先以 `--mode smoke` 在独立集群预演四轮真实重启，再使用新 tag、结果目录执行正式测试。参数和命令见 [README](README.md)。预演通过不代表 24 小时验收通过。
+
+版本兼容性：当前开发版 TiFlash 会调用 PD 的 `GetGCState`。实测 PD `v8.5.7` 不提供该 RPC，会使后台同步/关闭持续等待。因此不把 `v8.5.7` 固定为本计划其他组件的版本；使用兼容组件并保存实际版本，不能将此类启动失败解释为重启优化失败。额外列计划中的旧版 TiFlash 对照仍使用 `v8.5.7`。
 
 ## 环境和执行参数
 
@@ -30,7 +32,7 @@
 
 120 轮是覆盖下限，单纯运行满 24 小时不能算通过。主循环有约 138 个 10 分钟时隙；轮次失败不能通过增加其他组合的成功数抵消。
 
-正式运行前做一次小规模预演，检查启动、两种信号、gate、数据导出及清理。预演使用独立 tag，结果不计入 24 小时覆盖。
+正式运行前做一次四轮小规模预演，检查启动、两种信号、gate、数据导出及清理，覆盖第三轮 DROP 旧表、第四轮从原目录重启。预演使用独立 tag，结果不计入 24 小时覆盖。
 
 ## 构建和启动记录
 
@@ -43,9 +45,11 @@
 
 每轮测试执行前更新待测分支、构建并核验二进制，版本确认后才开始计时；这里的一轮指完整 24 小时测试，不是每次进程重启。需要编译时移除所有名称包含 proxy 的环境变量；不执行 `make format`。使用完整 TiFlash 安装目录，24 小时期间不更新分支、不替换二进制或依赖。下一次完整测试再更新分支并记录新的实际版本。
 
-启动使用 `tiup playground v8.5.7`，通过 `--tiflash.binpath` 指定支持 gate 的 wrapper；wrapper 配置的真实 server 指向新版完整安装目录中的 TiFlash 二进制。若覆盖 `--db.binpath`、`--kv.binpath`、`--pd.binpath`，相应本地组件也须为 `v8.5.7`，并核验实际版本。
+启动使用 TiUP Playground，通过 `--tiflash.binpath` 指定支持 gate 的 wrapper；wrapper 配置的真实 server 指向新版完整安装目录中的 TiFlash 二进制。TiDB、TiKV、PD 全部用 `--*.binpath` 显式覆盖；Playground 命令中的版本参数只是启动默认值，实际版本以二进制输出及 `cluster_info` 为准。可用 `--component-version` 核对预期版本；Nightly 分发标签不一定等于二进制实际 Release Version，按实际输出填写。
 
 启用 TiFlash debug 日志和调试端口，固定端口前检查冲突。TiUP 可能重新分配 metrics 端口，启动后读取真实进程参数，不能只按偏移量推算。
+
+所有监听端口应避开 Linux `ip_local_port_range`。本机范围为 `32768–60999` 时，可选 offset 6000、debug 29000，并确认整组端口空闲；高偏移使 gRPC 等服务端口进入临时端口范围，停机期间存在被出站连接占用的风险。执行器在启动前拒绝范围重叠，启动后复核 TiUP 的实际 TiFlash metrics/gRPC/proxy/debug 端口；保存范围和端口到结果，不修改系统 sysctl。
 
 本次独立 TiKV 关闭 Raft log GC，避免积压被 snapshot 替代；保存 SQL GC lifetime 原值，临时改为 `1h`。因关闭 Raft log GC，必须按下述资源规则限制写入和磁盘增长。正式计时前保存实际生效配置。
 
@@ -171,6 +175,8 @@ CREATE TABLE t_round_N (
 
 配置各组件日志轮转，文件总量设置上限，轮转后仍保证本轮及失败窗口可追溯；每轮及时复制目标日志窗口，避免被轮转覆盖。Raft 日志目录和日志归档单独计量。关闭 GC 下的空间增长是测试配置的预期成本，不能据此直接判 TiFlash 泄漏。
 
+本次目录大小为在线采样值，遍历期间 compaction 和日志轮转可能删除子目录或文件，执行器跳过这些已消失的后代节点并继续统计。测试根目录消失、权限错误和 I/O 错误仍中止；文件系统剩余空间阈值照常检查，不以目录采样代替容量检查。
+
 每次重启后的同一稳定阶段比较 RSS/FD；若连续 5 个相同阶段检查点都增长且总增幅超过 50%，记录资源异常并取证。最终判定结合缓存、数据量及进程代次，不能直接跨进程比较一个绝对值。
 
 ## 通过 失败和未覆盖的判定
@@ -191,6 +197,8 @@ CREATE TABLE t_round_N (
 失败用例不自动清空目录重试来覆盖原结果。保存时间线、真实 PID、退出码、信号、版本、最后确认序号、DDL 状态、schema、指标及完整数据差异；停止 writer。如果进程仍处于 SIGSTOP，先核对身份再 SIGCONT，以便取证或正常清理。
 
 预期停机窗口内的连接断开和暂时不可用单独记录，不能混同于数据差异或内部 apply 错误；恢复后仍不可用则按上述超时标准判失败。
+
+旧表清理后的重启可能继续重放本地 tombstone 表残留 Region 的日志。执行器仅在本次 `DROP TABLE` 成功返回后登记表名、table_id、轮次和时间；对默认 keyspace 中已登记 ID，由 `TiDBSchemaSyncer.cpp` 打出的完整 `Can not find related database_id and logical_table_id from table_id_map, sync table schema fail. physical_table_id=...` ERROR 单独计数。这条非致命映射查找错误不判失败，原始日志仍完整归档，删除凭据见 `logs/retired-tables.json`，逐条记录见 `logs/retired-table-schema-errors.jsonl`，各阶段证据和最终结果同时保留计数。登记前的错误不追溯豁免；同消息的活动表、未知 ID、其他 keyspace，以及其他 ERROR/FATAL 一律仍判失败。数据全量核验和优化断言保持不变。
 
 ## 证据目录和清理
 
@@ -227,10 +235,17 @@ audit.json                        对原始证据重新复核的结果
 
 - 本目录 [run_matrix.py](run_matrix.py) 提供单轮 DDL、完整行比较和 `restart_case()`。
 - 本目录 [restartable_tiflash.py](restartable_tiflash.py) 支持 `restart.gate`、真实子进程 PID 和信号/退出日志。
-- 参数和运行示例见 [README](README.md)；当前没有 24 小时调度入口，单轮矩阵不能代替完整长跑。
+- [run_restart_soak.py](run_restart_soak.py) 实现长跑调度；[soak_workload.py](soak_workload.py) 提供持续写入、事务确认和日志回放；控制器回归见 [test_restart_soak.py](test_restart_soak.py)。
 
 执行前将实际使用的脚本复制到结果目录并记录哈希，配置指向这份固定副本。二进制路径通过参数指定，待测 commit 从真实二进制版本读取；不依赖历史结果目录或脚本仓库的 HEAD。禁止 24 小时期间热更新脚本或二进制。
 
 执行器应实现持久化状态机：`Ready -> StopRequested -> ExitedAndGated -> OfflineWritesAndDDL -> Starting -> CatchingUp -> Checking -> OptimizationProbe -> Ready`。各阶段有超时及停止处理，写入结果以 `run_id + round_id + stage` 关联；调度器中断后先核对实际状态并取证，不自动重放不确定阶段。
 
 单轮旧脚本中的全局一次性暂停点、固定 metrics 端口假设、跨进程计数相减，以及未核实真实子进程是否退出的清理方式，均不能带入长跑执行器。先完成预演，再运行正式 24 小时测试。
+
+## 执行模式与结果判定
+
+- 默认 `--mode soak`：24 小时、预热/收尾各 30 分钟、相邻轮次开始至少间隔 10 分钟。允许配置时长，但不足 24 小时或覆盖不足时返回 `coverage_incomplete`，不能设置 `acceptance_24h=true`。
+- `--mode smoke`：依次执行强杀+DROP 末列、强杀+MODIFY 中间列、正常退出+MODIFY 末列、正常退出+DROP 末列。四轮均检查后续优化，第二、四轮执行新增列反向检查，并覆盖第三轮清理旧表后第四轮的重启重放。降低持续负载数据量和写入速率，保留 10,000 行 DDL 积压；少于四轮不能通过。成功状态为 `smoke_passed`，`acceptance_24h` 始终为 false。
+- 返回码 0 表示所选模式执行及清理成功；失败、未覆盖、中断、覆盖不足或清理失败返回非零。失败不自动重放阶段，也不覆盖已有结果目录。
+- `result.json` 和 `FINAL_REPORT.md` 为结果入口；`audit.json` 重新回放操作日志，并核验完整行归档。完整 24 小时的验收还要求所有 12 个组合各至少 10 轮、至少 10 次反向检查、有效写入时间至少 50%，以及每个小时有有效跳过采样证据。
