@@ -263,12 +263,28 @@ void WaitCheckRegionReadyImpl(
         if (regions_to_check.empty())
             break;
 
+        // Bound the diagnostic size while exposing a stalled Region before
+        // shutdown; debug/metrics endpoints can be up before gRPC is ready.
+        FmtBuffer pending;
+        size_t sampled = 0;
+        for (const auto & [region_id, latest_index] : regions_to_check)
+        {
+            if (sampled++ >= 10)
+                break;
+            if (auto region = kvstore.getRegion(region_id); region)
+                pending.fmtAppend(
+                    "[region_id={} target_index={} applied_index={}] ",
+                    region_id,
+                    latest_index,
+                    region->appliedIndex());
+        }
         LOG_INFO(
             log,
-            "{} regions need to apply to latest index, sleep for {:.3f}s, tot_regions={}",
+            "{} regions need to apply to latest index, sleep for {:.3f}s, tot_regions={} pending={}",
             regions_to_check.size(),
             wait_tick_time,
-            total_regions_cnt);
+            total_regions_cnt,
+            pending.toString());
         std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<Int64>(wait_tick_time * 1000)));
         wait_tick_time = std::min(max_wait_tick_time, wait_tick_time * 2);
     } while (region_check_watch.elapsedSeconds() < get_wait_region_ready_timeout_sec

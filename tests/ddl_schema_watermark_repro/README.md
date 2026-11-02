@@ -94,7 +94,7 @@ python3 tests/ddl_schema_watermark_repro/monitor_apply_progress.py \
   --output /absolute/path/to/new-diagnostic-output
 ```
 
-结果保存在 `samples.jsonl` 和 `alerts.jsonl`。支持新增 `apply_diagnostics` 字段的诊断 proxy 可区分未投递、已投递未完成、RawNode 有 Ready 但 FSM 未轮询等状态；旧二进制仍能采样，但不能判断投递阶段。诊断版本是本地未提交的观测补丁，不包含功能修复，运行时需记录对应 patch 与二进制 SHA256。`--pid-file` 可指定重启控制器保存的实际 TiFlash 子进程 PID 文件，避免跨重启累计停滞时间。接口不可用会中断连续停滞证据，commit 增长本身不会清除 apply 停滞计时。监控不写数据、不触发新 apply 任务；状态请求仍会经过 peer FSM，因此复现时须记录采样频率，不能假定观测完全不影响时序。
+结果保存在 `samples.jsonl` 和 `alerts.jsonl`。支持新增 `apply_diagnostics` 字段的诊断 proxy 可区分未投递、已投递未完成、RawNode 有 Ready 但 FSM 未轮询等状态；旧二进制仍能采样，但不能判断投递阶段。初始诊断版仅增加观测信息；后续 Ready 调度修复及验证结果见 [问题记录](PROXY_READY_RECOVERY_BUG.md)。运行时需记录对应 patch 与二进制 SHA256。`--pid-file` 可指定重启控制器保存的实际 TiFlash 子进程 PID 文件，避免跨重启累计停滞时间。接口不可用会中断连续停滞证据，commit 增长本身不会清除 apply 停滞计时。监控不写数据、不触发新 apply 任务；状态请求仍会经过 peer FSM，因此复现时须记录采样频率，不能假定观测完全不影响时序。
 
 ```bash
 python3 -m pip install -r tests/ddl_schema_watermark_repro/requirements.txt
