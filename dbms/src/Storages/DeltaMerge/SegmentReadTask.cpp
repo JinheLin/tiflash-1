@@ -580,6 +580,11 @@ void SegmentReadTask::doFetchPages(const disaggregated::FetchDisaggPagesRequest 
     grpc::ClientContext client_context;
     // set timeout for the streaming call to avoid inf wait before `Finish()`
     rpc.setClientContext(client_context, dm_context->global_context.getSettingsRef().disagg_fetch_pages_timeout);
+    const bool only_release_snapshot = request.page_ids_size() == 0 && !needFetchMemTableSet();
+    // A WN may be listening again while some pooled channels are still reconnecting.
+    // Wait for the selected channel within the RPC deadline instead of failing fast.
+    if (!only_release_snapshot)
+        client_context.set_wait_for_ready(true);
     auto stream_resp = rpc.call(&client_context, request);
     RUNTIME_CHECK(stream_resp != nullptr);
     SCOPE_EXIT({
@@ -591,24 +596,25 @@ void SegmentReadTask::doFetchPages(const disaggregated::FetchDisaggPagesRequest 
         }
     });
 
-    if (request.page_ids_size() == 0 && !needFetchMemTableSet())
+    if (only_release_snapshot)
     {
         // All delta data is cached in the compute node, just send a request to notify WN
         // to release the snapshot of current segment. The Compute node can safely ignore
         // the error message in response under this case.
-        finishPagesPacketStream(stream_resp, /*ignore_err*/ true);
+        finishPagesPacketStream(stream_resp, /*ignore_err*/ true, /*received_packet*/ false);
         return;
     }
 
     doFetchPagesImpl(
-        [&stream_resp, this](disaggregated::PagesPacket & packet) {
+        [&stream_resp, this, received_packet = false](disaggregated::PagesPacket & packet) mutable {
             if (stream_resp->Read(&packet))
             {
+                received_packet = true;
                 return true;
             }
             else
             {
-                finishPagesPacketStream(stream_resp, /*ignore_err*/ false);
+                finishPagesPacketStream(stream_resp, /*ignore_err*/ false, received_packet);
                 return false;
             }
         },
@@ -800,13 +806,16 @@ GlobalSegmentID SegmentReadTask::getGlobalSegmentID() const
 
 void SegmentReadTask::finishPagesPacketStream(
     std::unique_ptr<grpc::ClientReader<disaggregated::PagesPacket>> & stream_resp,
-    bool ignore_err)
+    bool ignore_err,
+    bool received_packet)
 {
     if (unlikely(stream_resp == nullptr))
         return;
 
     auto status = stream_resp->Finish();
     stream_resp.reset(); // Reset to avoid calling `Finish()` repeatedly.
+    const auto * cluster = dm_context->global_context.getTMTContext().getKVCluster();
+    pingcap::kv::dropConnIfNeeded(cluster->rpc_client, extra_remote_info->store_address, status);
     if (ignore_err)
     {
         if (!status.ok())
@@ -841,6 +850,19 @@ void SegmentReadTask::finishPagesPacketStream(
                 *this,
                 status.error_message());
         }
+        case grpc::StatusCode::UNAVAILABLE:
+            // The WN consumes the segment task before streaming, so a partially received
+            // stream cannot be replayed. Retry connection failures before any packets arrive.
+            if (!received_packet)
+                throw pingcap::Exception(
+                    fmt::format(
+                        "Failed to fetch pages for {}, wn_address={} status={} message={}",
+                        *this,
+                        extra_remote_info->store_address,
+                        static_cast<int>(status.error_code()),
+                        status.error_message()),
+                    pingcap::GRPCErrorCode);
+            [[fallthrough]];
         default:
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,

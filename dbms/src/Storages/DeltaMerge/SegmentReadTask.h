@@ -163,7 +163,8 @@ private:
 
     void finishPagesPacketStream(
         std::unique_ptr<grpc::ClientReader<disaggregated::PagesPacket>> & stream,
-        bool ignore_err);
+        bool ignore_err,
+        bool received_packet);
 
     BlockInputStreamPtr input_stream;
 

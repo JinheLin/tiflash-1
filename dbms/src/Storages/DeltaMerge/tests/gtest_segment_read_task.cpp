@@ -25,9 +25,15 @@
 #include <Storages/DeltaMerge/tests/gtest_dm_delta_merge_store_test_basic.h>
 #include <Storages/DeltaMerge/tests/gtest_segment_test_basic.h>
 #include <Storages/DeltaMerge/tests/gtest_segment_util.h>
+#include <Storages/KVStore/TMTContext.h>
 #include <TestUtils/FunctionTestUtils.h>
 #include <TestUtils/InputStreamTestUtils.h>
 #include <TestUtils/TiFlashTestBasic.h>
+#include <grpcpp/server_builder.h>
+
+#include <algorithm>
+#include <atomic>
+#include <thread>
 
 using namespace DB::tests;
 
@@ -35,6 +41,7 @@ namespace DB::ErrorCodes
 {
 extern const int DT_DELTA_INDEX_ERROR;
 extern const int FETCH_PAGES_ERROR;
+extern const int TIMEOUT_EXCEEDED;
 } // namespace DB::ErrorCodes
 
 namespace DB::FailPoints
@@ -45,6 +52,45 @@ extern const char disable_flush_cache[];
 
 namespace DB::DM::tests
 {
+
+namespace
+{
+class FetchPagesService : public tikvpb::Tikv::Service
+{
+public:
+    grpc::Status FetchDisaggPages(
+        grpc::ServerContext *,
+        const disaggregated::FetchDisaggPagesRequest * request,
+        grpc::ServerWriter<disaggregated::PagesPacket> * writer) override
+    {
+        const bool fail = requests.fetch_add(1) < failures;
+        const size_t packet_count = fail ? (send_packet_before_error ? 1 : 0) : packets.size();
+        for (size_t i = 0; i < packet_count; ++i)
+        {
+            auto packet = packets[i];
+            packet.clear_pages();
+            for (const auto & data : packets[i].pages())
+            {
+                RemotePb::RemotePage page;
+                if (!page.ParseFromString(data))
+                    return {grpc::StatusCode::INTERNAL, "Invalid test page"};
+                if (std::find(request->page_ids().begin(), request->page_ids().end(), page.page_id())
+                    != request->page_ids().end())
+                    packet.add_pages(data);
+            }
+            if (!writer->Write(packet))
+                return {grpc::StatusCode::CANCELLED, "Client stopped reading pages"};
+        }
+        return fail ? error : grpc::Status::OK;
+    }
+
+    std::vector<disaggregated::PagesPacket> packets;
+    size_t failures = 0;
+    grpc::Status error{grpc::StatusCode::UNAVAILABLE, "WN is restarting"};
+    bool send_packet_before_error = false;
+    std::atomic<size_t> requests{0};
+};
+} // namespace
 
 class SegmentReadTaskTest : public SegmentTestBasic
 {
@@ -219,7 +265,7 @@ public:
         {
             db_context->getSharedContextDisagg()->initReadNodePageCache(
                 db_context->getPathPool(),
-                getTemporaryPath(),
+                getTemporaryPath() + "/page_cache",
                 1 * 1024 * 1024 * 1024);
         }
     }
@@ -236,7 +282,6 @@ public:
 
     void fetchPages(const SegmentReadTaskPtr & remote_seg, const SegmentReadTaskPtr & local_seg)
     {
-        auto table_column_defines = DMTestEnv::getDefaultColumns();
         WorkQueue<disaggregated::PagesPacket> q;
 
         // Send pages.
@@ -259,6 +304,12 @@ public:
         ASSERT_EQ(q.size(), 0);
 
         remote_seg->initColumnFileDataProvider(occupied_result.pages_guard);
+        checkInputStreams(remote_seg, local_seg);
+    }
+
+    static void checkInputStreams(const SegmentReadTaskPtr & remote_seg, const SegmentReadTaskPtr & local_seg)
+    {
+        auto table_column_defines = DMTestEnv::getDefaultColumns();
         remote_seg->initInputStream(*table_column_defines, 0, nullptr, ReadMode::Bitmap, DEFAULT_BLOCK_SIZE, false);
         auto remote_stream = remote_seg->getInputStream();
 
@@ -280,6 +331,88 @@ public:
         auto local_stream = local_seg->getInputStream();
 
         ASSERT_INPUTSTREAM_BLOCKS(local_stream, remote_blks);
+    }
+
+    void withFetchPagesService(
+        FetchPagesService & service,
+        const std::function<void(const SegmentReadTaskPtr &, const SegmentReadTaskPtr &)> & check,
+        bool restart_server = false)
+    {
+        auto fp_guard = disableFlushCache();
+        const auto tiny_rows = db_context->getSettingsRef().dt_segment_delta_cache_limit_rows;
+        auto block = DMTestEnv::prepareSimpleWriteBlock(0, tiny_rows, false);
+        store->write(*db_context, db_context->getSettingsRef(), block);
+        block = DMTestEnv::prepareSimpleWriteBlock(tiny_rows, tiny_rows + 64, false);
+        store->write(*db_context, db_context->getSettingsRef(), block);
+        auto [remote_seg, local_seg] = getRemoteAndLocalSegmentReadTasks(false, 0);
+        ASSERT_FALSE(remote_seg->extra_remote_info->remote_page_ids.empty());
+        ASSERT_TRUE(remote_seg->needFetchMemTableSet());
+
+        WNFetchPagesStreamWriter writer(
+            [&service](const disaggregated::PagesPacket & packet) { service.packets.push_back(packet); },
+            local_seg,
+            remote_seg->extra_remote_info->remote_page_ids,
+            db_context->getSettingsRef());
+        writer.syncWrite();
+        ASSERT_FALSE(service.packets.empty());
+
+        grpc::ServerBuilder builder;
+        int port = 0;
+        builder.AddListeningPort("127.0.0.1:0", grpc::InsecureServerCredentials(), &port);
+        builder.RegisterService(&service);
+        auto server = builder.BuildAndStart();
+        ASSERT_NE(server, nullptr);
+        SCOPE_EXIT({
+            if (server)
+            {
+                server->Shutdown();
+                server->Wait();
+            }
+        });
+
+        auto address = fmt::format("127.0.0.1:{}", port);
+        remote_seg->extra_remote_info->store_address = address;
+        const auto & rpc_client = db_context->getTMTContext().getKVCluster()->rpc_client;
+        auto old_connections = rpc_client->getConnArray(address);
+        SCOPE_EXIT({ rpc_client->removeConn(address); });
+        std::thread restart_thread;
+        SCOPE_EXIT({
+            if (restart_thread.joinable())
+                restart_thread.join();
+        });
+        if (restart_server)
+        {
+            server->Shutdown();
+            server->Wait();
+            server.reset();
+            // Put every pooled channel in TRANSIENT_FAILURE before the page RPC starts.
+            const auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(5);
+            for (const auto & connection : old_connections->vec)
+                connection->channel->GetState(true);
+            for (const auto & connection : old_connections->vec)
+            {
+                auto state = connection->channel->GetState(false);
+                while (state != GRPC_CHANNEL_TRANSIENT_FAILURE)
+                {
+                    ASSERT_TRUE(connection->channel->WaitForStateChange(state, deadline));
+                    state = connection->channel->GetState(false);
+                }
+            }
+            restart_thread = std::thread([&] {
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                // Waiting for readiness must not fail and replace the connection pool.
+                EXPECT_EQ(rpc_client->getConnArray(address), old_connections);
+                grpc::ServerBuilder restart_builder;
+                restart_builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+                restart_builder.RegisterService(&service);
+                server = restart_builder.BuildAndStart();
+                EXPECT_NE(server, nullptr);
+            });
+        }
+        auto ds_guard = setMockRemoteDataStore();
+        check(remote_seg, local_seg);
+        if (service.error.error_code() == grpc::StatusCode::UNAVAILABLE && service.failures > 0)
+            EXPECT_NE(rpc_client->getConnArray(address), old_connections);
     }
 
     static void checkDMFile(const DMFilePtr & dmfile_wn, const DMFilePtr & dmfile_cn)
@@ -887,6 +1020,101 @@ TEST_F(DMStoreForSegmentReadTaskTest, BasicMemTableSet)
 try
 {
     basicMemTableSet();
+}
+CATCH
+
+TEST_F(DMStoreForSegmentReadTaskTest, FetchPagesRetryUnavailable)
+try
+{
+    FetchPagesService service;
+    service.failures = 2;
+    withFetchPagesService(service, [&](const auto & remote_seg, const auto & local_seg) {
+        remote_seg->fetchPages();
+        EXPECT_EQ(service.requests.load(), 3);
+        checkInputStreams(remote_seg, local_seg);
+    });
+}
+CATCH
+
+TEST_F(DMStoreForSegmentReadTaskTest, FetchPagesWaitForReady)
+try
+{
+    FetchPagesService service;
+    withFetchPagesService(
+        service,
+        [&](const auto & remote_seg, const auto & local_seg) {
+            remote_seg->fetchPages();
+            EXPECT_EQ(service.requests.load(), 1);
+            checkInputStreams(remote_seg, local_seg);
+        },
+        /*restart_server*/ true);
+}
+CATCH
+
+TEST_F(DMStoreForSegmentReadTaskTest, FetchPagesUnavailableRetryLimit)
+try
+{
+    FetchPagesService service;
+    service.failures = 3;
+    withFetchPagesService(service, [&](const auto & remote_seg, const auto &) {
+        try
+        {
+            remote_seg->fetchPages();
+            FAIL() << "Unavailable WN should fail after three attempts";
+        }
+        catch (const pingcap::Exception & e)
+        {
+            EXPECT_EQ(e.code(), pingcap::GRPCErrorCode);
+        }
+        EXPECT_EQ(service.requests.load(), 3);
+    });
+}
+CATCH
+
+TEST_F(DMStoreForSegmentReadTaskTest, FetchPagesNoRetryAfterPacket)
+try
+{
+    FetchPagesService service;
+    service.failures = 1;
+    service.send_packet_before_error = true;
+    withFetchPagesService(service, [&](const auto & remote_seg, const auto &) {
+        EXPECT_THROW(remote_seg->fetchPages(), DB::Exception);
+        EXPECT_EQ(service.requests.load(), 1);
+    });
+}
+CATCH
+
+TEST_F(DMStoreForSegmentReadTaskTest, FetchPagesNoRetryNonTransientError)
+try
+{
+    FetchPagesService service;
+    service.failures = 1;
+    service.error = {grpc::StatusCode::INTERNAL, "Failed to read page"};
+    withFetchPagesService(service, [&](const auto & remote_seg, const auto &) {
+        EXPECT_THROW(remote_seg->fetchPages(), DB::Exception);
+        EXPECT_EQ(service.requests.load(), 1);
+    });
+}
+CATCH
+
+TEST_F(DMStoreForSegmentReadTaskTest, FetchPagesNoRetryTimeout)
+try
+{
+    FetchPagesService service;
+    service.failures = 1;
+    service.error = {grpc::StatusCode::DEADLINE_EXCEEDED, "Fetch pages timed out"};
+    withFetchPagesService(service, [&](const auto & remote_seg, const auto &) {
+        try
+        {
+            remote_seg->fetchPages();
+            FAIL() << "Fetch pages timeout should be propagated";
+        }
+        catch (const DB::Exception & e)
+        {
+            EXPECT_EQ(e.code(), ErrorCodes::TIMEOUT_EXCEEDED);
+        }
+        EXPECT_EQ(service.requests.load(), 1);
+    });
 }
 CATCH
 
